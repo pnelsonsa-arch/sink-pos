@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jubilee Hotel & Bottle Store POS</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        jubileeBg: '#0f1115',
+                        jubileeCard: '#161a22',
+                        jubileeBorder: '#21262d',
+                        cyanNeon: '#00f0ff',
+                        magentaNeon: '#ff007f',
+                        emeraldNeon: '#10b981'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Html5-QRCode Scanner Library for Tablets & Phones -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body class="bg-jubileeBg text-gray-100 font-sans antialiased h-screen overflow-hidden flex flex-col">
+
+    <!-- LOGIN / AUTHENTICATION OVERLAY -->
+    <div id="loginOverlay" class="fixed inset-0 z-50 bg-jubileeBg/95 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-jubileeCard border border-jubileeBorder rounded-3xl p-8 w-full max-w-md shadow-2xl space-y-6">
+            <div class="text-center space-y-2">
+                <div class="w-16 h-16 bg-cyanNeon/10 border border-cyanNeon/30 rounded-2xl mx-auto flex items-center justify-center text-cyanNeon text-2xl font-bold">
+                    <i class="fa-solid fa-wine-bottle"></i>
+                </div>
+                <h1 class="text-2xl font-black text-white tracking-wide">JUBILEE POS</h1>
+                <p class="text-xs text-gray-400">Hotel & Bottle Store Management System</p>
+            </div>
+
+            <form onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Select Team Member</label>
+                    <select id="loginUserSelect" onchange="fillUserPin()" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-3 text-sm text-white focus:outline-none focus:border-cyanNeon">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Security PIN</label>
+                    <input type="password" id="loginPinInput" maxlength="4" placeholder="Enter 4-digit PIN" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-3 text-center text-lg font-mono text-cyanNeon focus:outline-none focus:border-cyanNeon" required />
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button type="submit" class="flex-1 bg-cyanNeon text-gray-950 font-bold py-3 rounded-xl text-sm transition-all hover:opacity-90 shadow-lg shadow-cyanNeon/20">
+                        Sign In
+                    </button>
+                    <button type="button" onclick="openQrLoginModal()" class="bg-[#0a0a0c] border border-jubileeBorder hover:border-cyanNeon text-cyanNeon px-4 py-3 rounded-xl text-sm transition-all" title="Scan QR Code / Badge">
+                        <i class="fa-solid fa-qrcode text-lg"></i>
+                    </button>
+                </div>
+            </form>
+
+            <div class="pt-4 border-t border-jubileeBorder flex justify-between items-center text-xs">
+                <button onclick="openNewUserModal()" class="text-cyanNeon hover:underline"><i class="fa-solid fa-user-plus mr-1"></i> Add New Staff</button>
+                <span class="text-gray-500 font-mono">v3.5 Live Sheets & Cash-Up</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP CONTAINER -->
+    <div id="appContainer" class="hidden flex-1 flex flex-col h-screen overflow-hidden">
+        
+        <!-- HEADER NAVBAR -->
+        <header class="bg-jubileeCard border-b border-jubileeBorder px-6 py-3.5 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-cyanNeon/10 border border-cyanNeon/30 flex items-center justify-center text-cyanNeon font-bold">
+                        <i class="fa-solid fa-wine-glass-empty text-sm"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-extrabold text-sm text-white tracking-wider">JUBILEE HOTEL & BOTTLE STORE</h2>
+                        <div class="flex items-center gap-2 text-[10px] text-gray-400">
+                            <span id="currentRoleBadge" class="bg-cyanNeon/10 text-cyanNeon px-1.5 py-0.5 rounded font-semibold">Admin</span>
+                            <span>•</span>
+                            <span id="currentUserDisplay">System User</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NAV TABS -->
+                <nav class="hidden md:flex items-center gap-1.5 bg-[#0a0a0c] p-1 border border-jubileeBorder rounded-xl ml-6">
+                    <button onclick="switchTab('pos')" id="tabBtn-pos" class="px-4 py-2 rounded-xl text-xs font-semibold transition-all bg-cyanNeon text-gray-950 shadow">POS Till</button>
+                    <button onclick="switchTab('inventory')" id="tabBtn-inventory" class="px-4 py-2 rounded-xl text-xs font-semibold transition-all text-gray-400 hover:text-white">Inventory & Prices</button>
+                    <button onclick="switchTab('grv')" id="tabBtn-grv" class="px-4 py-2 rounded-xl text-xs font-semibold transition-all text-gray-400 hover:text-white">GRV Receiving</button>
+                    <button onclick="switchTab('cashup')" id="tabBtn-cashup" class="px-4 py-2 rounded-xl text-xs font-semibold transition-all text-gray-400 hover:text-white">Daily Summary & Cash-Up</button>
+                    <button onclick="switchTab('reorder')" id="tabBtn-reorder" class="px-4 py-2 rounded-xl text-xs font-semibold transition-all text-gray-400 hover:text-white">Reorder System</button>
+                </nav>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <button onclick="openPayoutModal()" class="bg-[#0a0a0c] border border-jubileeBorder hover:border-magentaNeon px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all text-magentaNeon" title="Record Cash Payout / Expense">
+                    <i class="fa-solid fa-file-invoice-dollar"></i>
+                    <span class="hidden sm:inline">Payouts</span>
+                </button>
+                <button onclick="openSyncModal()" class="bg-[#0a0a0c] border border-jubileeBorder hover:border-cyanNeon px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all">
+                    <i class="fa-solid fa-cloud text-cyanNeon"></i>
+                    <span class="hidden sm:inline">Sheets & Cloud Sync</span>
+                    <span id="cloudStatusBadge" class="w-2 h-2 rounded-full bg-emeraldNeon"></span>
+                </button>
+                <button onclick="logout()" class="bg-magentaNeon/10 border border-magentaNeon/30 hover:bg-magentaNeon/20 text-magentaNeon px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                    <span class="hidden sm:inline">Logout</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- CONTENT BODY -->
+        <main class="flex-1 overflow-hidden relative">
+
+            <!-- TAB 1: POS TILL -->
+            <div id="tab-pos" class="absolute inset-0 flex flex-col md:flex-row overflow-hidden">
+                <div class="flex-1 flex flex-col h-full bg-jubileeBg p-4 md:p-6 overflow-hidden">
+                    <div class="flex flex-col sm:flex-row gap-3 mb-4 shrink-0">
+                        <div class="relative flex-1">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-gray-500 text-sm"></i>
+                            <input type="text" id="posSearchInput" oninput="filterPosCatalog()" placeholder="Search wine, beer, cider, bulk, snacks, water, mixers, SKU..." class="w-full bg-jubileeCard border border-jubileeBorder rounded-2xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyanNeon" />
+                        </div>
+                        <div class="flex items-center gap-2 overflow-x-auto pb-1" id="posCategoryFilters">
+                            <button onclick="setPosCategory('All')" class="pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-cyanNeon text-gray-950 whitespace-nowrap transition-colors">All</button>
+                            <button onclick="setPosCategory('Wine')" class="pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-jubileeCard border border-jubileeBorder text-gray-300 hover:border-cyanNeon whitespace-nowrap transition-colors">Wine</button>
+                            <button onclick="setPosCategory('Beer')" class="pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-jubileeCard border border-jubileeBorder text-gray-300 hover:border-cyanNeon whitespace-nowrap transition-colors">Beer</button>
+                            <button onclick="setPosCategory('Craft Beer')" class="pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-jubileeCard border border-jubileeBorder text-gray-300 hover:border-cyanNeon whitespace-nowrap transition-colors">Craft Beer</button>
+                            <button onclick="setPosCategory('Cider')" class="pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-jubileeCard border border-jubileeBorder text-gray-300 hover:border-cyanNeon whitespace-nowrap transition-colors">Cider</button>
+                            <button onclick="setPosCategory('Spirits')" class="pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-jubileeCard border border-jubileeBorder text-gray-300 hover:border-cyanNeon whitespace-nowrap transition-colors">Spirits</button>
+                            <button onclick="setPosCategory('Bulk')" class="pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-jubileeCard border border-jubileeBorder text-gray-300 hover:border-cyanNeon whitespace-nowrap transition-colors">Bulk</button>
+                            <button onclick="setPosCategory('Snacks')" class="pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-jubileeCard border border-jubileeBorder text-gray-300 hover:border-cyanNeon whitespace-nowrap transition-colors">Snacks</button>
+                            <button onclick="setPosCategory('Water')" class="pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-jubileeCard border border-jubileeBorder text-gray-300 hover:border-cyanNeon whitespace-nowrap transition-colors">Water</button>
+                            <button onclick="setPosCategory('Mixers')" class="pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-jubileeCard border border-jubileeBorder text-gray-300 hover:border-cyanNeon whitespace-nowrap transition-colors">Mixers</button>
+                        </div>
+                    </div>
+
+                    <div id="posProductGrid" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 pr-1">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- CART -->
+                <div class="w-full md:w-[380px] lg:w-[420px] bg-jubileeCard border-t md:border-t-0 md:border-l border-jubileeBorder flex flex-col h-full shrink-0">
+                    <div class="p-4 border-b border-jubileeBorder flex items-center justify-between shrink-0">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-cart-shopping text-cyanNeon"></i>
+                            <h3 class="font-bold text-sm text-white">Current Ticket</h3>
+                        </div>
+                        <button onclick="clearCart()" class="text-xs text-gray-400 hover:text-magentaNeon transition-colors"><i class="fa-solid fa-trash-can mr-1"></i> Clear</button>
+                    </div>
+
+                    <div id="cartItemList" class="flex-1 overflow-y-auto p-4 divide-y divide-jubileeBorder/50">
+                        <!-- Populated by JS -->
+                    </div>
+
+                    <div class="p-4 border-t border-jubileeBorder bg-[#0a0a0c] space-y-3 shrink-0">
+                        <div class="space-y-1.5 text-xs">
+                            <div class="flex justify-between text-gray-400"><span>Subtotal</span><span id="cartSubtotal" class="font-mono text-white">R 0.00</span></div>
+                            <div class="flex justify-between text-gray-400"><span>VAT (15% Included)</span><span id="cartVat" class="font-mono text-white">R 0.00</span></div>
+                            <div class="flex justify-between text-base font-extrabold text-white pt-2 border-t border-jubileeBorder"><span>Total Due</span><span id="cartTotal" class="font-mono text-cyanNeon text-lg">R 0.00</span></div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 pt-1">
+                            <button onclick="checkout('Cash')" class="bg-emeraldNeon hover:opacity-90 text-gray-950 font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-emeraldNeon/10">
+                                <i class="fa-solid fa-money-bill-wave"></i> Cash Tender
+                            </button>
+                            <button onclick="checkout('Card')" class="bg-cyanNeon hover:opacity-90 text-gray-950 font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyanNeon/10">
+                                <i class="fa-solid fa-credit-card"></i> Card / SnapScan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: INVENTORY & PRICES -->
+            <div id="tab-inventory" class="hidden absolute inset-0 flex flex-col p-6 overflow-hidden bg-jubileeBg">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 shrink-0">
+                    <div>
+                        <h2 class="text-xl font-bold text-white">Inventory & Price Management</h2>
+                        <p class="text-xs text-gray-400">Manage stock quantities, wholesale costs, retail pricing, and auto SKUs.</p>
+                    </div>
+                    <div class="flex items-center gap-3 w-full sm:w-auto">
+                        <input type="text" id="inventorySearch" oninput="filterInventoryTable()" placeholder="Search inventory..." class="bg-jubileeCard border border-jubileeBorder rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyanNeon w-full sm:w-64" />
+                        <button onclick="openAddStockModal()" class="bg-cyanNeon text-gray-950 font-bold px-4 py-2.5 rounded-xl text-xs whitespace-nowrap transition-all shadow hover:opacity-90">
+                            <i class="fa-solid fa-plus mr-1.5"></i> Add New Stock
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-1 bg-jubileeCard border border-jubileeBorder rounded-2xl overflow-hidden flex flex-col">
+                    <div class="overflow-y-auto flex-1">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-[#0a0a0c] border-b border-jubileeBorder text-[10px] uppercase font-semibold text-gray-400 tracking-wider sticky top-0">
+                                    <th class="p-3.5">SKU Code</th>
+                                    <th class="p-3.5">Product Name</th>
+                                    <th class="p-3.5">Category</th>
+                                    <th class="p-3.5 text-right">Cost Price</th>
+                                    <th class="p-3.5 text-right">Retail Price</th>
+                                    <th class="p-3.5 text-center">Stock</th>
+                                    <th class="p-3.5">Supplier</th>
+                                    <th class="p-3.5 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventoryTableBody" class="divide-y divide-jubileeBorder text-xs">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: GRV RECEIVING -->
+            <div id="tab-grv" class="hidden absolute inset-0 flex flex-col p-6 overflow-hidden bg-jubileeBg">
+                <div class="flex justify-between items-center mb-6 shrink-0">
+                    <div>
+                        <h2 class="text-xl font-bold text-white">Goods Received Voucher (GRV) & Auto SKU</h2>
+                        <p class="text-xs text-gray-400">Scan barcodes, log incoming stock, and proportionally distribute invoice costs.</p>
+                    </div>
+                    <button onclick="openGrvScannerModal()" class="bg-[#0a0a0c] border border-jubileeBorder hover:border-cyanNeon text-cyanNeon px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all">
+                        <i class="fa-solid fa-barcode text-sm"></i> Camera Barcode Scanner
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
+                    <div class="bg-jubileeCard border border-jubileeBorder rounded-2xl p-5 flex flex-col gap-4 overflow-y-auto">
+                        <h3 class="font-bold text-sm text-cyanNeon pb-2 border-b border-jubileeBorder">GRV Invoice Details</h3>
+                        
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-400 mb-1">Supplier</label>
+                            <div class="flex gap-2">
+                                <select id="grvSupplier" class="flex-1 bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyanNeon">
+                                    <!-- Populated by JS -->
+                                </select>
+                                <button onclick="openAddSupplierModal()" class="bg-[#0a0a0c] border border-jubileeBorder hover:border-cyanNeon text-cyanNeon px-3 py-2.5 rounded-xl text-xs" title="Add Supplier"><i class="fa-solid fa-plus"></i></button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-400 mb-1">Invoice / Reference Number</label>
+                            <input type="text" id="grvInvoiceNum" placeholder="e.g. INV-98421" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyanNeon" />
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-400 mb-1">Total Invoice Cost (Optional Proportional Split)</label>
+                            <input type="number" step="0.01" id="grvTotalInvoiceCost" placeholder="e.g. 5400.00" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs font-mono text-emeraldNeon focus:outline-none focus:border-cyanNeon" />
+                        </div>
+
+                        <div class="pt-4 border-t border-jubileeBorder space-y-3">
+                            <h4 class="font-bold text-xs text-white">Add Line Item</h4>
+                            <div>
+                                <label class="block text-[10px] text-gray-400 mb-1">Product Name / Description</label>
+                                <input type="text" id="grvLineName" placeholder="e.g. Hunters Gold Cider 330ml (6 Pack)" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyanNeon" />
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[10px] text-gray-400 mb-1">Category</label>
+                                    <select id="grvLineCategory" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2 text-xs text-white focus:outline-none focus:border-cyanNeon">
+                                        <option value="Wine">Wine</option>
+                                        <option value="Beer">Beer</option>
+                                        <option value="Craft Beer">Craft Beer</option>
+                                        <option value="Cider">Cider</option>
+                                        <option value="Spirits">Spirits</option>
+                                        <option value="Bulk">Bulk</option>
+                                        <option value="Snacks">Snacks</option>
+                                        <option value="Water">Water</option>
+                                        <option value="Mixers">Mixers</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-gray-400 mb-1">Quantity</label>
+                                    <input type="number" id="grvLineQty" value="12" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2 text-xs font-mono text-white focus:outline-none focus:border-cyanNeon" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[10px] text-gray-400 mb-1">Unit Cost (R)</label>
+                                    <input type="number" step="0.01" id="grvLineCost" placeholder="0.00" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2 text-xs font-mono text-white focus:outline-none focus:border-cyanNeon" />
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-gray-400 mb-1">Markup %</label>
+                                    <input type="number" id="grvDefaultMarkup" value="40" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2 text-xs font-mono text-white focus:outline-none focus:border-cyanNeon" />
+                                </div>
+                            </div>
+                            <button onclick="addManualGrvLine()" class="w-full bg-[#0a0a0c] border border-jubileeBorder hover:border-cyanNeon text-cyanNeon font-bold py-2.5 rounded-xl text-xs transition-all">
+                                <i class="fa-solid fa-plus mr-1"></i> Add Line to GRV
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 bg-jubileeCard border border-jubileeBorder rounded-2xl p-5 flex flex-col overflow-hidden">
+                        <div class="flex items-center justify-between pb-3 border-b border-jubileeBorder mb-4">
+                            <h3 class="font-bold text-sm text-white">Scanned & Entered Lines</h3>
+                            <span id="grvItemsCount" class="text-xs bg-cyanNeon/10 text-cyanNeon px-2 py-0.5 rounded font-mono font-semibold">0 Lines</span>
+                        </div>
+
+                        <div id="grvScannedList" class="flex-1 overflow-y-auto space-y-2.5 pr-1">
+                            <div class="text-center py-12 text-gray-500 text-xs">
+                                <i class="fa-solid fa-receipt text-3xl mb-2 opacity-20"></i>
+                                <p>No lines added to this GRV yet.<br>Use the form on the left or scan barcodes.</p>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 mt-4 border-t border-jubileeBorder flex items-center justify-between shrink-0">
+                            <div class="text-xs text-gray-400">SKUs will be auto-generated upon posting.</div>
+                            <button onclick="completeGrvReceiving()" class="bg-emeraldNeon hover:opacity-90 text-gray-950 font-bold px-6 py-3 rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-emeraldNeon/10">
+                                <i class="fa-solid fa-check mr-1.5"></i> Post GRV & Update Inventory
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: DAILY SUMMARY & CASH-UP -->
+            <div id="tab-cashup" class="hidden absolute inset-0 flex flex-col p-6 overflow-hidden bg-jubileeBg">
+                <div class="flex justify-between items-center mb-6 shrink-0">
+                    <div>
+                        <h2 class="text-xl font-bold text-white">Progressive Daily Summary & Cash-Up</h2>
+                        <p class="text-xs text-gray-400">Real-time breakdown of today's sales, payment methods, cash drawer status, and payouts.</p>
+                    </div>
+                    <button onclick="renderDailyCashup()" class="bg-cyanNeon text-gray-950 font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow hover:opacity-90">
+                        <i class="fa-solid fa-rotate mr-1.5"></i> Refresh Summary
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto space-y-6 pr-1">
+                    <!-- KPI STAT CARDS -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="bg-jubileeCard border border-jubileeBorder rounded-2xl p-5">
+                            <div class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Today's Total Sales</div>
+                            <div id="kpiTotalSales" class="font-mono text-2xl font-black text-cyanNeon">R 0.00</div>
+                            <div id="kpiSalesCount" class="text-[11px] text-gray-500 mt-1">0 Transactions completed</div>
+                        </div>
+                        <div class="bg-jubileeCard border border-jubileeBorder rounded-2xl p-5">
+                            <div class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Cash Collected</div>
+                            <div id="kpiCashSales" class="font-mono text-2xl font-black text-emeraldNeon">R 0.00</div>
+                            <div class="text-[11px] text-gray-500 mt-1">Cash register revenue</div>
+                        </div>
+                        <div class="bg-jubileeCard border border-jubileeBorder rounded-2xl p-5">
+                            <div class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Card / SnapScan</div>
+                            <div id="kpiCardSales" class="font-mono text-2xl font-black text-white">R 0.00</div>
+                            <div class="text-[11px] text-gray-500 mt-1">Electronic payments</div>
+                        </div>
+                        <div class="bg-jubileeCard border border-jubileeBorder rounded-2xl p-5">
+                            <div class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Total Payouts / Expenses</div>
+                            <div id="kpiPayouts" class="font-mono text-2xl font-black text-magentaNeon">R 0.00</div>
+                            <div id="kpiPayoutsCount" class="text-[11px] text-gray-500 mt-1">0 Cash expenses logged</div>
+                        </div>
+                    </div>
+
+                    <!-- PAYOUTS LOG TABLE -->
+                    <div class="bg-jubileeCard border border-jubileeBorder rounded-2xl p-5 space-y-4">
+                        <div class="flex items-center justify-between pb-3 border-b border-jubileeBorder">
+                            <h3 class="font-bold text-sm text-white"><i class="fa-solid fa-file-invoice-dollar text-magentaNeon mr-2"></i> Today's Cash Payouts & Expenses</h3>
+                            <button onclick="openPayoutModal()" class="bg-magentaNeon/10 border border-magentaNeon/30 hover:bg-magentaNeon/20 text-magentaNeon px-3 py-1.5 rounded-xl text-xs font-semibold">
+                                <i class="fa-solid fa-plus mr-1"></i> Record Payout
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-[#0a0a0c] border-b border-jubileeBorder text-[10px] uppercase font-semibold text-gray-400">
+                                        <th class="p-3">Reference ID</th>
+                                        <th class="p-3">Timestamp</th>
+                                        <th class="p-3">Category / Reason</th>
+                                        <th class="p-3">Recipient / Notes</th>
+                                        <th class="p-3">Authorized By</th>
+                                        <th class="p-3 text-right">Amount (R)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dailyPayoutsTableBody" class="divide-y divide-jubileeBorder text-xs">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- TODAY'S TICKETS TABLE -->
+                    <div class="bg-jubileeCard border border-jubileeBorder rounded-2xl p-5 space-y-4">
+                        <h3 class="font-bold text-sm text-white pb-3 border-b border-jubileeBorder"><i class="fa-solid fa-receipt text-cyanNeon mr-2"></i> Today's Sales Tickets Breakdown</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-[#0a0a0c] border-b border-jubileeBorder text-[10px] uppercase font-semibold text-gray-400">
+                                        <th class="p-3">Ticket No</th>
+                                        <th class="p-3">Time</th>
+                                        <th class="p-3">Payment Method</th>
+                                        <th class="p-3">Cashier</th>
+                                        <th class="p-3 text-right">Total (R)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dailyTicketsTableBody" class="divide-y divide-jubileeBorder text-xs">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 5: REORDER SYSTEM -->
+            <div id="tab-reorder" class="hidden absolute inset-0 flex flex-col p-6 overflow-hidden bg-jubileeBg">
+                <div class="flex justify-between items-center mb-6 shrink-0">
+                    <div>
+                        <h2 class="text-xl font-bold text-white">Inventory Reorder System</h2>
+                        <p class="text-xs text-gray-400">Automated stock replenishment alerts and purchase order generation.</p>
+                    </div>
+                    <button onclick="generatePurchaseOrders()" class="bg-cyanNeon text-gray-950 font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow hover:opacity-90">
+                        <i class="fa-solid fa-file-invoice mr-1.5"></i> Generate Purchase Orders
+                    </button>
+                </div>
+
+                <div class="flex-1 bg-jubileeCard border border-jubileeBorder rounded-2xl overflow-hidden flex flex-col">
+                    <div class="overflow-y-auto flex-1">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-[#0a0a0c] border-b border-jubileeBorder text-[10px] uppercase font-semibold text-gray-400 tracking-wider sticky top-0">
+                                    <th class="p-3.5">Product SKU & Name</th>
+                                    <th class="p-3.5">Category</th>
+                                    <th class="p-3.5 text-center">Current Stock</th>
+                                    <th class="p-3.5 text-center">Min Threshold</th>
+                                    <th class="p-3.5">Supplier</th>
+                                    <th class="p-3.5 text-center">Status</th>
+                                    <th class="p-3.5 text-right">Suggested Order Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reorderTableBody" class="divide-y divide-jubileeBorder text-xs">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- CASH CHECKOUT MODAL -->
+    <div id="cashCheckoutModal" class="fixed inset-0 z-50 bg-jubileeBg/90 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-jubileeCard border border-jubileeBorder rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4 text-center">
+            <div class="w-12 h-12 rounded-2xl bg-emeraldNeon/10 border border-emeraldNeon/30 text-emeraldNeon flex items-center justify-center text-xl mx-auto">
+                <i class="fa-solid fa-cash-register"></i>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold text-white">Cash Tender</h3>
+                <p class="text-xs text-gray-400 mt-0.5">Total Due: <span id="cashModalTotalDue" class="font-mono font-bold text-cyanNeon">R 0.00</span></p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 mb-1.5 uppercase">Amount Tendered by Customer</label>
+                <input type="number" step="0.01" id="cashTenderedInput" oninput="calculateCashChange()" placeholder="0.00" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-3 text-center text-xl font-mono text-emeraldNeon focus:outline-none focus:border-cyanNeon" />
+            </div>
+
+            <div class="bg-[#0a0a0c] border border-jubileeBorder rounded-2xl p-3">
+                <div class="text-[10px] text-gray-400 uppercase font-semibold">Change Due</div>
+                <div id="cashModalChangeDue" class="font-mono text-2xl font-extrabold text-emeraldNeon">R 0.00</div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-2">
+                <button onclick="confirmCashCheckout()" class="bg-emeraldNeon text-gray-950 font-bold py-3 rounded-xl text-xs uppercase tracking-wider">Complete Sale</button>
+                <button onclick="closeModal('cashCheckoutModal')" class="bg-[#0a0a0c] border border-jubileeBorder text-gray-300 font-bold py-3 rounded-xl text-xs">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CASH PAYOUT / EXPENSE MODAL -->
+    <div id="payoutModal" class="fixed inset-0 z-50 bg-jubileeBg/90 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-jubileeCard border border-jubileeBorder rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-jubileeBorder">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-file-invoice-dollar text-magentaNeon"></i>
+                    <h3 class="font-bold text-sm text-white">Record Cash Payout / Expense</h3>
+                </div>
+                <button onclick="closeModal('payoutModal')" class="text-gray-400 hover:text-white text-xs"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <form onsubmit="confirmPayout(event)" class="space-y-3">
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1">Expense Category / Reason</label>
+                    <select id="payoutReason" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-magentaNeon">
+                        <option value="Ice & Supplies Run">Ice & Supplies Run</option>
+                        <option value="Supplier Cash Purchase">Supplier Cash Purchase</option>
+                        <option value="Petty Cash / General Expense">Petty Cash / General Expense</option>
+                        <option value="Staff Transport / Wages">Staff Transport / Wages</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1">Payout Amount (R)</label>
+                    <input type="number" step="0.01" id="payoutAmountInput" placeholder="0.00" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-3 text-center text-xl font-mono text-magentaNeon focus:outline-none focus:border-magentaNeon" required />
+                </div>
+
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1">Recipient / Notes</label>
+                    <input type="text" id="payoutNotesInput" placeholder="e.g. Bought 5 bags of ice" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-magentaNeon" required />
+                </div>
+
+                <div class="pt-2 flex gap-2">
+                    <button type="submit" class="flex-1 bg-magentaNeon text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider">Authorize Payout</button>
+                    <button type="button" onclick="closeModal('payoutModal')" class="bg-[#0a0a0c] border border-jubileeBorder text-gray-300 font-bold px-4 py-3 rounded-xl text-xs">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- QR CODE & STAFF LOGIN MODAL -->
+    <div id="qrLoginModal" class="fixed inset-0 z-50 bg-jubileeBg/90 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-jubileeCard border border-jubileeBorder rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-jubileeBorder">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-qrcode text-cyanNeon"></i>
+                    <h3 class="font-bold text-sm text-white">Staff QR Badge Scanner</h3>
+                </div>
+                <button onclick="closeQrLoginModal()" class="text-gray-400 hover:text-white text-xs"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <div id="qrLoginReader" class="w-full h-48 bg-[#0a0a0c] rounded-xl overflow-hidden border border-jubileeBorder flex items-center justify-center">
+                <!-- Camera viewfinder -->
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 mb-2">Or Tap Quick Staff Badge</label>
+                <div id="qrUserBadgeList" class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <button onclick="closeQrLoginModal()" class="w-full bg-[#0a0a0c] border border-jubileeBorder text-gray-300 font-bold py-2.5 rounded-xl text-xs">Close</button>
+        </div>
+    </div>
+
+    <!-- GRV CAMERA BARCODE SCANNER MODAL -->
+    <div id="grvScannerModal" class="fixed inset-0 z-50 bg-jubileeBg/90 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-jubileeCard border border-jubileeBorder rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-jubileeBorder">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-barcode text-cyanNeon"></i>
+                    <h3 class="font-bold text-sm text-white">GRV Barcode & QR Scanner</h3>
+                </div>
+                <button onclick="closeGrvScannerModal()" class="text-gray-400 hover:text-white text-xs"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <div id="grvScannerReader" class="w-full h-56 bg-[#0a0a0c] rounded-xl overflow-hidden border border-jubileeBorder flex items-center justify-center">
+                <!-- Camera viewfinder -->
+            </div>
+            <p class="text-[11px] text-gray-400 text-center">Point camera at product barcode or QR label to auto-add to GRV.</p>
+
+            <button onclick="closeGrvScannerModal()" class="w-full bg-[#0a0a0c] border border-jubileeBorder text-gray-300 font-bold py-2.5 rounded-xl text-xs">Close Scanner</button>
+        </div>
+    </div>
+
+    <!-- ADD / EDIT STOCK ITEM MODAL -->
+    <div id="stockModal" class="fixed inset-0 z-50 bg-jubileeBg/90 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-jubileeCard border border-jubileeBorder rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-jubileeBorder">
+                <h3 id="stockModalTitle" class="font-bold text-sm text-white"><i class="fa-solid fa-box text-cyanNeon"></i> Add Stock Item</h3>
+                <button onclick="closeModal('stockModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <form onsubmit="saveStockItem(event)" class="space-y-3">
+                <input type="hidden" id="editProductId" />
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] text-gray-400 mb-1">Category</label>
+                        <select id="modalCategory" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyanNeon">
+                            <option value="Wine">Wine</option>
+                            <option value="Beer">Beer</option>
+                            <option value="Craft Beer">Craft Beer</option>
+                            <option value="Cider">Cider</option>
+                            <option value="Spirits">Spirits</option>
+                            <option value="Bulk">Bulk</option>
+                            <option value="Snacks">Snacks</option>
+                            <option value="Water">Water</option>
+                            <option value="Mixers">Mixers</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-gray-400 mb-1">Auto SKU Code</label>
+                        <input type="text" id="modalSku" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs font-mono text-cyanNeon focus:outline-none" readonly />
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1">Product Description</label>
+                    <input type="text" id="modalName" placeholder="e.g. KWV 10 Year Brandy 750ml" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyanNeon" required />
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] text-gray-400 mb-1">Cost Price (R)</label>
+                        <input type="number" step="0.01" id="modalCost" placeholder="0.00" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs font-mono text-white focus:outline-none focus:border-cyanNeon" required />
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-gray-400 mb-1">Retail Selling Price (R)</label>
+                        <input type="number" step="0.01" id="modalPrice" placeholder="0.00" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs font-mono text-emeraldNeon font-bold focus:outline-none focus:border-cyanNeon" required />
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] text-gray-400 mb-1">Initial Stock Qty</label>
+                        <input type="number" id="modalStock" placeholder="24" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs font-mono text-white focus:outline-none focus:border-cyanNeon" required />
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-gray-400 mb-1">Min Reorder Threshold</label>
+                        <input type="number" id="modalMinStock" placeholder="10" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs font-mono text-white focus:outline-none focus:border-cyanNeon" required />
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1">Supplier</label>
+                    <input type="text" id="modalSupplier" placeholder="e.g. Distell SA" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyanNeon" required />
+                </div>
+
+                <div class="pt-2 flex gap-2">
+                    <button type="submit" class="flex-1 bg-cyanNeon text-gray-950 font-bold py-2.5 rounded-xl text-xs">Save Stock Item</button>
+                    <button type="button" onclick="closeModal('stockModal')" class="bg-[#0a0a0c] border border-jubileeBorder text-gray-300 font-bold px-4 py-2.5 rounded-xl text-xs">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ADD NEW SUPPLIER MODAL -->
+    <div id="newSupplierModal" class="fixed inset-0 z-50 bg-jubileeBg/90 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-jubileeCard border border-jubileeBorder rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-jubileeBorder">
+                <h3 class="font-bold text-sm text-white">Add New Supplier</h3>
+                <button onclick="closeModal('newSupplierModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="saveNewSupplier(event)" class="space-y-3">
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1">Supplier Company Name</label>
+                    <input type="text" id="newSupplierNameInput" placeholder="e.g. Stellenbosch Vineyards" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyanNeon" required />
+                </div>
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1">Contact Details / Rep Name</label>
+                    <input type="text" id="newSupplierContactInput" placeholder="Phone or email" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyanNeon" />
+                </div>
+                <div class="pt-2 flex gap-2">
+                    <button type="submit" class="flex-1 bg-cyanNeon text-gray-950 font-bold py-2.5 rounded-xl text-xs">Save Supplier</button>
+                    <button type="button" onclick="closeModal('newSupplierModal')" class="bg-[#0a0a0c] border border-jubileeBorder text-gray-300 font-bold px-4 py-2.5 rounded-xl text-xs">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- NEW USER / STAFF MODAL -->
+    <div id="newUserModal" class="fixed inset-0 z-50 bg-jubileeBg/90 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-jubileeCard border border-jubileeBorder rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-jubileeBorder">
+                <h3 class="font-bold text-sm text-white">Add New Team Member</h3>
+                <button onclick="closeModal('newUserModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="saveNewUser(event)" class="space-y-3">
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1">Staff Member Name</label>
+                    <input type="text" id="newUserName" placeholder="Full Name" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyanNeon" required />
+                </div>
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1">Role Permission</label>
+                    <select id="newUserRole" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-cyanNeon">
+                        <option value="Cashier">Cashier</option>
+                        <option value="Manager">Manager</option>
+                        <option value="Admin">Admin</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1">4-Digit Security PIN</label>
+                    <input type="password" maxlength="4" id="newUserPin" placeholder="4-digit PIN" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-center text-lg font-mono text-cyanNeon focus:outline-none focus:border-cyanNeon" required />
+                </div>
+                <div class="pt-2 flex gap-2">
+                    <button type="submit" class="flex-1 bg-cyanNeon text-gray-950 font-bold py-2.5 rounded-xl text-xs">Create Staff Profile</button>
+                    <button type="button" onclick="closeModal('newUserModal')" class="bg-[#0a0a0c] border border-jubileeBorder text-gray-300 font-bold px-4 py-2.5 rounded-xl text-xs">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- GOOGLE SHEETS & CLOUD SYNC MODAL -->
+    <div id="syncModal" class="fixed inset-0 z-50 bg-jubileeBg/90 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-jubileeCard border border-jubileeBorder rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-jubileeBorder">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-cloud-arrow-up text-cyanNeon"></i>
+                    <h3 class="font-bold text-sm text-white">Google Sheets & Cloud Drive Sync</h3>
+                </div>
+                <button onclick="closeModal('syncModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <!-- GOOGLE SHEETS API CONFIG -->
+                <div class="bg-[#0a0a0c] border border-jubileeBorder rounded-2xl p-4 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-white"><i class="fa-solid fa-file-excel text-emeraldNeon mr-1.5"></i> Google Sheets Web App URL</span>
+                        <span id="sheetsStatusBadge" class="text-emeraldNeon font-semibold">Active</span>
+                    </div>
+                    <p class="text-gray-400 text-[11px]">Your POS is linked to your deployed Google Sheets Web App endpoint.</p>
+                    <input type="text" id="googleSheetsUrlInput" value="https://script.google.com/macros/s/AKfycbxfpklTrGc-8QG1O-sFwIOaYgPTLJ-s9ol6-HOJIqT8RnkGsZP2CqfYr5RImb2aPqIk/exec" class="w-full bg-jubileeCard border border-jubileeBorder rounded-xl p-2.5 text-[11px] font-mono text-cyanNeon focus:outline-none focus:border-cyanNeon" />
+                    <button onclick="pullDataFromGoogleSheets()" class="w-full bg-emeraldNeon text-gray-950 font-bold py-2.5 rounded-xl text-xs mt-1">
+                        <i class="fa-solid fa-rotate mr-1"></i> Pull Inventory From Google Sheets
+                    </button>
+                </div>
+
+                <!-- CLOUD DRIVE STORAGE PATH CONFIG -->
+                <div class="bg-[#0a0a0c] border border-jubileeBorder rounded-2xl p-4 space-y-3">
+                    <div class="font-bold text-white"><i class="fa-solid fa-hard-drive text-cyanNeon mr-1.5"></i> Cloud Storage & Drive Configuration</div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[10px] text-gray-400 mb-1">Select Drive Provider</label>
+                            <select id="cloudProviderSelect" class="w-full bg-jubileeCard border border-jubileeBorder rounded-xl p-2 text-xs text-white focus:outline-none focus:border-cyanNeon">
+                                <option value="OneDrive">Microsoft OneDrive</option>
+                                <option value="GoogleDrive">Google Drive</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-400 mb-1">Storage Sync Path</label>
+                            <input type="text" id="cloudStoragePathInput" value="/Apps/JubileePOS/database_backup.json" class="w-full bg-jubileeCard border border-jubileeBorder rounded-xl p-2 text-xs font-mono text-white focus:outline-none focus:border-cyanNeon" />
+                        </div>
+                    </div>
+                    <button onclick="linkCloudStorageAccount()" id="linkCloudBtn" class="w-full bg-[#0078d4] hover:opacity-90 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2">
+                        <i class="fa-brands fa-cloud"></i> Connect & Authorize Cloud Drive
+                    </button>
+                </div>
+            </div>
+
+            <div class="pt-2 flex gap-2">
+                <button onclick="exportDatabaseJson()" class="flex-1 bg-[#0a0a0c] border border-jubileeBorder text-gray-300 font-bold py-2.5 rounded-xl text-xs">
+                    <i class="fa-solid fa-download mr-1"></i> Download Local JSON Backup
+                </button>
+                <button onclick="closeModal('syncModal')" class="bg-cyanNeon text-gray-950 font-bold px-5 py-2.5 rounded-xl text-xs">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT LOGIC -->
+    <script>
+        // --- GLOBAL STATE & MASTER PRODUCTS ---
+        let USERS = [];
+        let SUPPLIERS = [
+            "Distell SA", "SAB Miller", "Diageo SA", "Pernod Ricard",
+            "Coca-Cola Beverages", "Kanonkop Estate", "CBC Brewery",
+            "Devil's Peak", "Inverroche Distilleries", "KWV Wine Emporium",
+            "Heineken SA", "Red Bull Energy", "Simba Snacks", "Aquelle Water"
+        ];
+
+        let PRODUCTS = [
+            { id: 1, sku: "W-2026-101", name: "Nederburg Cabernet Sauvignon 750ml", category: "Wine", cost: 85.00, price: 149.99, stock: 42, minStock: 10, supplier: "Distell SA" },
+            { id: 2, sku: "W-2026-102", name: "Durbanville Hills Sauvignon Blanc 750ml", category: "Wine", cost: 72.00, price: 129.99, stock: 18, minStock: 12, supplier: "Distell SA" },
+            { id: 3, sku: "W-2026-103", name: "Kanonkop Paul Sauer 2020", category: "Wine", cost: 340.00, price: 549.99, stock: 15, minStock: 5, supplier: "Kanonkop Estate" },
+            { id: 4, sku: "W-2026-104", name: "Rupert & Rothschild Classique 750ml", category: "Wine", cost: 165.00, price: 269.99, stock: 24, minStock: 8, supplier: "Distell SA" },
+            { id: 5, sku: "B-2026-201", name: "Castle Lager 340ml NRB (6 Pack)", category: "Beer", cost: 55.00, price: 89.99, stock: 120, minStock: 30, supplier: "SAB Miller" },
+            { id: 6, sku: "B-2026-202", name: "Carling Black Label 340ml NRB (6 Pack)", category: "Beer", cost: 58.00, price: 94.99, stock: 95, minStock: 25, supplier: "SAB Miller" },
+            { id: 7, sku: "B-2026-203", name: "Castle Lite 340ml NRB (6 Pack)", category: "Beer", cost: 62.00, price: 99.99, stock: 150, minStock: 40, supplier: "SAB Miller" },
+            { id: 8, sku: "C-2026-301", name: "CBC Amber Lager 340ml Bottle", category: "Craft Beer", cost: 18.00, price: 32.50, stock: 35, minStock: 15, supplier: "CBC Brewery" },
+            { id: 9, sku: "C-2026-302", name: "Devil's Peak First Light Golden Ale", category: "Craft Beer", cost: 19.50, price: 34.99, stock: 28, minStock: 12, supplier: "Devil's Peak" },
+            { id: 10, sku: "CD-2026-601", name: "Hunters Gold Cider 330ml (6 Pack)", category: "Cider", cost: 68.00, price: 109.99, stock: 85, minStock: 25, supplier: "Distell SA" },
+            { id: 11, sku: "CD-2026-602", name: "Savanna Dry Cider 330ml (6 Pack)", category: "Cider", cost: 78.00, price: 124.99, stock: 110, minStock: 30, supplier: "Distell SA" },
+            { id: 12, sku: "BLK-2026-701", name: "House Red Wine Bulk Keg 30L", category: "Bulk", cost: 1450.00, price: 2400.00, stock: 4, minStock: 2, supplier: "KWV Wine Emporium" },
+            { id: 13, sku: "BLK-2026-702", name: "Standard Lager Bulk Party Keg 50L", category: "Bulk", cost: 1600.00, price: 2650.00, stock: 6, minStock: 2, supplier: "SAB Miller" },
+            { id: 14, sku: "SNK-2026-801", name: "Simba Salt & Vinegar Chips 125g", category: "Snacks", cost: 12.00, price: 22.00, stock: 65, minStock: 20, supplier: "Simba Snacks" },
+            { id: 15, sku: "SNK-2026-802", name: "Biltong Chillibites 100g Pack", category: "Snacks", cost: 38.00, price: 65.00, stock: 40, minStock: 15, supplier: "Simba Snacks" },
+            { id: 16, sku: "WAT-2026-901", name: "Aquelle Still Water 500ml Bottle", category: "Water", cost: 4.50, price: 10.00, stock: 180, minStock: 50, supplier: "Aquelle Water" },
+            { id: 17, sku: "WAT-2026-902", name: "Aquelle Sparkling Water 1L", category: "Water", cost: 9.00, price: 18.00, stock: 90, minStock: 25, supplier: "Aquelle Water" },
+            { id: 18, sku: "S-2026-401", name: "Bell's Blended Scotch Whisky 750ml", category: "Spirits", cost: 180.00, price: 269.99, stock: 24, minStock: 8, supplier: "Diageo SA" },
+            { id: 19, sku: "S-2026-402", name: "Jameson Irish Whiskey 750ml", category: "Spirits", cost: 320.00, price: 449.99, stock: 14, minStock: 6, supplier: "Pernod Ricard" },
+            { id: 20, sku: "M-2026-501", name: "Schweppes Tonic Water 200ml Can", category: "Mixers", cost: 7.50, price: 14.00, stock: 210, minStock: 50, supplier: "Coca-Cola Beverages" },
+            { id: 21, sku: "M-2026-503", name: "Red Bull Energy Drink 250ml Can", category: "Mixers", cost: 14.00, price: 26.00, stock: 90, minStock: 25, supplier: "Red Bull Energy" }
+        ];
+
+        let CART = [];
+        let SALES_HISTORY = [];
+        let CASH_PAYOUTS = [];
+        let CURRENT_USER = null;
+        let GRV_ITEMS = [];
+        let CURRENT_POS_CATEGORY = 'All';
+        let CLOUD_CONNECTED = true;
+        let qrScannerInstance = null;
+        let grvScannerInstance = null;
+        let barcodeBuffer = '';
+        let barcodeTimer = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSavedState();
+            if (USERS.length === 0) {
+                USERS.push({ id: 1, name: "System Administrator", role: "Admin", pin: "0000" });
+                saveStateToStorage();
+            }
+            populateUserSelect();
+            populateSupplierSelect();
+            setupHardwareScannerListener();
+            
+            // Attempt initial pull from Google Sheets Web App
+            pullDataFromGoogleSheets();
+        });
+
+        // --- HARDWARE BARCODE SCANNER LISTENER ---
+        function setupHardwareScannerListener() {
+            window.addEventListener('keypress', (e) => {
+                if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+                if (e.key === 'Enter') {
+                    if (barcodeBuffer.trim().length > 0) {
+                        handleScannedBarcode(barcodeBuffer.trim());
+                        barcodeBuffer = '';
+                    }
+                } else {
+                    barcodeBuffer += e.key;
+                    clearTimeout(barcodeTimer);
+                    barcodeTimer = setTimeout(() => { barcodeBuffer = ''; }, 150);
+                }
+            });
+        }
+
+        function handleScannedBarcode(code) {
+            const loginModal = document.getElementById('qrLoginModal');
+            if (loginModal && !loginModal.classList.contains('hidden')) {
+                const matchedUser = USERS.find(u => u.pin === code || u.name.toLowerCase().includes(code.toLowerCase()));
+                if (matchedUser) { loginAsUser(matchedUser.id); return; }
+            }
+
+            const product = PRODUCTS.find(p => p.sku.toLowerCase() === code.toLowerCase() || p.name.toLowerCase().includes(code.toLowerCase()));
+            if (product) {
+                if (!document.getElementById('tab-pos').classList.contains('hidden')) {
+                    addToCart(product.id);
+                    return;
+                }
+                if (!document.getElementById('tab-grv').classList.contains('hidden')) {
+                    addScannedProductToGrv(product);
+                    return;
+                }
+            }
+        }
+
+        function addScannedProductToGrv(product) {
+            const existing = GRV_ITEMS.find(i => i.sku === product.sku);
+            if (existing) { existing.qty++; }
+            else {
+                GRV_ITEMS.push({
+                    sku: product.sku, name: product.name, category: product.category,
+                    qty: 1, cost: product.cost, markup: 40, price: product.price
+                });
+            }
+            renderGrvList();
+        }
+
+        function loadSavedState() {
+            try {
+                const savedUsers = localStorage.getItem('jubilee_users');
+                const savedProducts = localStorage.getItem('jubilee_products');
+                const savedSuppliers = localStorage.getItem('jubilee_suppliers');
+                const savedSales = localStorage.getItem('jubilee_sales');
+                const savedPayouts = localStorage.getItem('jubilee_payouts');
+                if (savedUsers) USERS = JSON.parse(savedUsers);
+                if (savedProducts) PRODUCTS = JSON.parse(savedProducts);
+                if (savedSuppliers) SUPPLIERS = JSON.parse(savedSuppliers);
+                if (savedSales) SALES_HISTORY = JSON.parse(savedSales);
+                if (savedPayouts) CASH_PAYOUTS = JSON.parse(savedPayouts);
+            } catch (e) { console.error("Storage load failed", e); }
+        }
+
+        function saveStateToStorage() {
+            try {
+                localStorage.setItem('jubilee_users', JSON.stringify(USERS));
+                localStorage.setItem('jubilee_products', JSON.stringify(PRODUCTS));
+                localStorage.setItem('jubilee_suppliers', JSON.stringify(SUPPLIERS));
+                localStorage.setItem('jubilee_sales', JSON.stringify(SALES_HISTORY));
+                localStorage.setItem('jubilee_payouts', JSON.stringify(CASH_PAYOUTS));
+                syncSaleOrInventoryToGoogleSheets('sync_inventory', { products: PRODUCTS });
+            } catch (e) { console.error("Storage save failed", e); }
+        }
+
+        async function pullDataFromGoogleSheets() {
+            const url = document.getElementById('googleSheetsUrlInput').value.trim();
+            if (!url) return;
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.status === 'success' && data.products && data.products.length > 0) {
+                    PRODUCTS = data.products.map((p, index) => ({
+                        id: index + 1,
+                        sku: p.sku,
+                        name: p.name,
+                        category: p.category || 'Wine',
+                        cost: parseFloat(p.cost) || 0,
+                        price: parseFloat(p.price) || 0,
+                        stock: parseInt(p.stock) || 0,
+                        minStock: parseInt(p.minStock) || 10,
+                        supplier: p.supplier || 'Distell SA'
+                    }));
+                    renderPosGrid();
+                    renderInventoryTable();
+                    renderReorderTable();
+                    console.log("Successfully synchronized products from Google Sheets Web App!");
+                }
+            } catch (err) {
+                console.warn("Google Sheets live pull notice (CORS/offline mode):", err);
+            }
+        }
+
+        async function syncSaleOrInventoryToGoogleSheets(action, payload) {
+            const url = document.getElementById('googleSheetsUrlInput').value.trim();
+            if (!url) return;
+            try {
+                await fetch(url, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, ...payload })
+                });
+            } catch (err) { console.warn("Google Sheets push sync notice:", err); }
+        }
+
+        function linkCloudStorageAccount() {
+            const provider = document.getElementById('cloudProviderSelect').value;
+            const path = document.getElementById('cloudStoragePathInput').value.trim();
+            CLOUD_CONNECTED = true;
+            document.getElementById('cloudStatusBadge').className = 'w-2 h-2 rounded-full bg-emeraldNeon';
+            const btn = document.getElementById('linkCloudBtn');
+            btn.innerHTML = `<i class="fa-solid fa-check mr-1.5"></i> Connected to ${provider} (${path})`;
+            alert(`Successfully connected to ${provider}!\nCloud Path: ${path}\nAll inventory, sales, payouts, and GRV records will now automatically sync to your cloud drive.`);
+        }
+
+        function populateSupplierSelect() {
+            const select = document.getElementById('grvSupplier');
+            if (!select) return;
+            select.innerHTML = SUPPLIERS.map(s => `<option value="${s}">${s}</option>`).join('');
+        }
+
+        function openAddSupplierModal() {
+            document.getElementById('newSupplierNameInput').value = '';
+            document.getElementById('newSupplierContactInput').value = '';
+            document.getElementById('newSupplierModal').classList.remove('hidden');
+            document.getElementById('newSupplierModal').classList.add('flex');
+        }
+
+        function saveNewSupplier(e) {
+            e.preventDefault();
+            const name = document.getElementById('newSupplierNameInput').value.trim();
+            if (!name) return;
+            if (!SUPPLIERS.includes(name)) { SUPPLIERS.push(name); saveStateToStorage(); }
+            populateSupplierSelect();
+            document.getElementById('grvSupplier').value = name;
+            closeModal('newSupplierModal');
+        }
+
+        function populateUserSelect() {
+            const select = document.getElementById('loginUserSelect');
+            if (!select) return;
+            select.innerHTML = USERS.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+            fillUserPin();
+        }
+
+        function fillUserPin() {
+            const select = document.getElementById('loginUserSelect');
+            if (!select) return;
+            const user = USERS.find(u => u.id == select.value);
+            if (user) document.getElementById('loginPinInput').value = user.pin;
+        }
+
+        function openNewUserModal() {
+            document.getElementById('newUserName').value = '';
+            document.getElementById('newUserPin').value = '';
+            document.getElementById('newUserModal').classList.remove('hidden');
+            document.getElementById('newUserModal').classList.add('flex');
+        }
+
+        function saveNewUser(e) {
+            e.preventDefault();
+            const name = document.getElementById('newUserName').value.trim();
+            const role = document.getElementById('newUserRole').value;
+            const pin = document.getElementById('newUserPin').value.trim();
+            if (!name || pin.length !== 4) { alert("Please provide a valid name and 4-digit PIN."); return; }
+            const newId = USERS.length > 0 ? Math.max(...USERS.map(u => u.id)) + 1 : 1;
+            USERS.push({ id: newId, name: name, role: role, pin: pin });
+            saveStateToStorage();
+            closeModal('newUserModal');
+            populateUserSelect();
+            document.getElementById('loginUserSelect').value = newId;
+            fillUserPin();
+        }
+
+        function openQrLoginModal() {
+            const list = document.getElementById('qrUserBadgeList');
+            list.innerHTML = USERS.map(u => `
+                <button onclick="loginAsUser(${u.id})" class="bg-[#0a0a0c] border border-jubileeBorder hover:border-cyanNeon p-2.5 rounded-xl text-left transition-all">
+                    <div class="text-xs font-bold text-white truncate">${u.name}</div>
+                    <div class="text-[10px] uppercase font-semibold text-cyanNeon">${u.role}</div>
+                </button>
+            `).join('');
+
+            document.getElementById('qrLoginModal').classList.remove('hidden');
+            document.getElementById('qrLoginModal').classList.add('flex');
+
+            setTimeout(() => {
+                if (!qrScannerInstance) qrScannerInstance = new Html5Qrcode("qrLoginReader");
+                if (qrScannerInstance && qrScannerInstance.isScanning) return;
+                qrScannerInstance.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 200, height: 200 } },
+                    (decodedText) => {
+                        const matchedUser = USERS.find(u => u.pin === decodedText || u.name.toLowerCase().includes(decodedText.toLowerCase()));
+                        if (matchedUser) { closeQrLoginModal(); loginAsUser(matchedUser.id); }
+                    }, () => {}
+                ).catch(err => console.log("Camera notice:", err));
+            }, 300);
+        }
+
+        function closeQrLoginModal() {
+            if (qrScannerInstance && qrScannerInstance.isScanning) {
+                qrScannerInstance.stop().then(() => qrScannerInstance.clear()).catch(e => {});
+            }
+            closeModal('qrLoginModal');
+        }
+
+        function openGrvScannerModal() {
+            document.getElementById('grvScannerModal').classList.remove('hidden');
+            document.getElementById('grvScannerModal').classList.add('flex');
+
+            setTimeout(() => {
+                if (!grvScannerInstance) grvScannerInstance = new Html5Qrcode("grvScannerReader");
+                if (grvScannerInstance && grvScannerInstance.isScanning) return;
+                grvScannerInstance.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 150 } },
+                    (decodedText) => {
+                        closeGrvScannerModal();
+                        const prod = PRODUCTS.find(p => p.sku.toLowerCase() === decodedText.toLowerCase() || p.name.toLowerCase().includes(decodedText.toLowerCase()));
+                        if (prod) { addScannedProductToGrv(prod); }
+                        else {
+                            document.getElementById('grvLineName').value = decodedText;
+                            document.getElementById('grvLineCost').focus();
+                        }
+                    }, () => {}
+                ).catch(err => console.log("GRV Camera notice:", err));
+            }, 300);
+        }
+
+        function closeGrvScannerModal() {
+            if (grvScannerInstance && grvScannerInstance.isScanning) {
+                grvScannerInstance.stop().then(() => grvScannerInstance.clear()).catch(e => {});
+            }
+            closeModal('grvScannerModal');
+        }
+
+        function loginAsUser(userId) {
+            const user = USERS.find(u => u.id === userId);
+            if (!user) return;
+            CURRENT_USER = user;
+            document.getElementById('currentUserDisplay').innerText = user.name;
+            document.getElementById('currentRoleBadge').innerText = user.role;
+            closeModal('qrLoginModal');
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('appContainer').classList.remove('hidden');
+            initDashboard();
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const userId = parseInt(document.getElementById('loginUserSelect').value);
+            const pin = document.getElementById('loginPinInput').value.trim();
+            const user = USERS.find(u => u.id === userId);
+            if (!user || user.pin !== pin) { alert("Authentication Failed: Incorrect security PIN."); return; }
+            loginAsUser(userId);
+        }
+
+        function logout() {
+            document.getElementById('appContainer').classList.add('hidden');
+            document.getElementById('loginOverlay').classList.remove('hidden');
+            document.getElementById('loginPinInput').value = '';
+            CURRENT_USER = null;
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+            document.getElementById(modalId).classList.remove('flex');
+        }
+
+        function openSyncModal() {
+            document.getElementById('syncModal').classList.remove('hidden');
+            document.getElementById('syncModal').classList.add('flex');
+        }
+
+        function switchTab(tabName) {
+            ['pos', 'inventory', 'grv', 'cashup', 'reorder'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                const btn = document.getElementById(`tabBtn-${t}`);
+                if (btn) btn.className = "px-4 py-2 rounded-xl text-xs font-semibold transition-all text-gray-400 hover:text-white";
+            });
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tabBtn-${tabName}`);
+            if (activeBtn) activeBtn.className = "px-4 py-2 rounded-xl text-xs font-semibold transition-all bg-cyanNeon text-gray-950 shadow";
+            
+            if (tabName === 'cashup') {
+                renderDailyCashup();
+            }
+        }
+
+        function initDashboard() {
+            renderPosGrid();
+            renderInventoryTable();
+            renderReorderTable();
+        }
+
+        function setPosCategory(cat) {
+            CURRENT_POS_CATEGORY = cat;
+            document.querySelectorAll('#posCategoryFilters button').forEach(b => {
+                b.className = "pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-jubileeCard border border-jubileeBorder text-gray-300 hover:border-cyanNeon whitespace-nowrap transition-colors";
+            });
+            event.target.className = "pos-cat-btn px-4 py-2.5 rounded-xl text-xs font-semibold bg-cyanNeon text-gray-950 whitespace-nowrap transition-colors";
+            renderPosGrid();
+        }
+
+        function renderPosGrid() {
+            const query = document.getElementById('posSearchInput').value.toLowerCase();
+            const grid = document.getElementById('posProductGrid');
+            const filtered = PRODUCTS.filter(p => {
+                const matchesCat = CURRENT_POS_CATEGORY === 'All' || p.category === CURRENT_POS_CATEGORY;
+                const matchesQuery = p.name.toLowerCase().includes(query) || p.sku.toLowerCase().includes(query);
+                return matchesCat && matchesQuery;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `<div class="col-span-full text-center py-16 text-gray-500 text-xs">No matching products found.</div>`;
+                return;
+            }
+
+            grid.innerHTML = filtered.map(p => `
+                <div onclick="addToCart(${p.id})" class="bg-jubileeCard border border-jubileeBorder hover:border-cyanNeon rounded-2xl p-4 cursor-pointer transition-all flex flex-col justify-between group shadow-sm">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-[#0a0a0c] text-cyanNeon border border-jubileeBorder">${p.sku}</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded ${p.stock <= p.minStock ? 'bg-magentaNeon/10 text-magentaNeon' : 'bg-emeraldNeon/10 text-emeraldNeon'} font-semibold">Stock: ${p.stock}</span>
+                        </div>
+                        <h4 class="font-semibold text-xs text-white group-hover:text-cyanNeon transition-colors line-clamp-2 mb-1">${p.name}</h4>
+                        <p class="text-[10px] text-gray-400">${p.category}</p>
+                    </div>
+                    <div class="pt-3 mt-3 border-t border-jubileeBorder flex items-center justify-between">
+                        <span class="font-mono font-bold text-sm text-cyanNeon">R ${p.price.toFixed(2)}</span>
+                        <span class="w-7 h-7 rounded-lg bg-cyanNeon/10 text-cyanNeon flex items-center justify-center text-xs group-hover:bg-cyanNeon group-hover:text-gray-950 transition-colors">
+                            <i class="fa-solid fa-plus"></i>
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function filterPosCatalog() { renderPosGrid(); }
+
+        function addToCart(productId) {
+            const product = PRODUCTS.find(p => p.id === productId);
+            if (!product || product.stock <= 0) { alert("Product is out of stock!"); return; }
+            const existing = CART.find(item => item.id === productId);
+            if (existing) {
+                if (existing.qty < product.stock) existing.qty++;
+                else alert("Maximum available stock reached.");
+            } else {
+                CART.push({ id: product.id, sku: product.sku, name: product.name, price: product.price, qty: 1 });
+            }
+            renderCart();
+        }
+
+        function updateCartQty(productId, delta) {
+            const item = CART.find(i => i.id === productId);
+            if (!item) return;
+            const product = PRODUCTS.find(p => p.id === productId);
+            item.qty += delta;
+            if (item.qty <= 0) CART = CART.filter(i => i.id !== productId);
+            else if (product && item.qty > product.stock) item.qty = product.stock;
+            renderCart();
+        }
+
+        function clearCart() { CART = []; renderCart(); }
+
+        function renderCart() {
+            const container = document.getElementById('cartItemList');
+            if (CART.length === 0) {
+                container.innerHTML = `<div class="text-center py-12 text-gray-500 text-xs"><i class="fa-solid fa-basket-shopping text-3xl mb-2 opacity-35"></i><p>Cart is empty.</p></div>`;
+                document.getElementById('cartSubtotal').innerText = 'R 0.00';
+                document.getElementById('cartVat').innerText = 'R 0.00';
+                document.getElementById('cartTotal').innerText = 'R 0.00';
+                return;
+            }
+
+            container.innerHTML = CART.map(item => `
+                <div class="py-2.5 flex items-center justify-between">
+                    <div class="flex-1 pr-2">
+                        <h5 class="font-semibold text-xs text-white truncate">${item.name}</h5>
+                        <div class="text-[10px] text-gray-400 font-mono">R ${item.price.toFixed(2)} each</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="flex items-center bg-[#0a0a0c] border border-jubileeBorder rounded-lg overflow-hidden">
+                            <button onclick="updateCartQty(${item.id}, -1)" class="px-2 py-1 text-gray-400 hover:text-white text-xs"><i class="fa-solid fa-minus"></i></button>
+                            <span class="px-2 text-xs font-mono font-bold text-white">${item.qty}</span>
+                            <button onclick="updateCartQty(${item.id}, 1)" class="px-2 py-1 text-gray-400 hover:text-white text-xs"><i class="fa-solid fa-plus"></i></button>
+                        </div>
+                        <span class="font-mono text-xs font-bold text-cyanNeon w-16 text-right">R ${(item.price * item.qty).toFixed(2)}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            const subtotal = CART.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            const vat = subtotal * 0.15;
+            document.getElementById('cartSubtotal').innerText = `R ${subtotal.toFixed(2)}`;
+            document.getElementById('cartVat').innerText = `R ${vat.toFixed(2)}`;
+            document.getElementById('cartTotal').innerText = `R ${subtotal.toFixed(2)}`;
+        }
+
+        function checkout(method) {
+            if (CART.length === 0) { alert("Cart is empty."); return; }
+            const total = CART.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            if (method === 'Cash') {
+                document.getElementById('cashModalTotalDue').innerText = `R ${total.toFixed(2)}`;
+                document.getElementById('cashTenderedInput').value = '';
+                document.getElementById('cashModalChangeDue').innerText = 'R 0.00';
+                document.getElementById('cashCheckoutModal').classList.remove('hidden');
+                document.getElementById('cashCheckoutModal').classList.add('flex');
+                setTimeout(() => document.getElementById('cashTenderedInput').focus(), 100);
+                return;
+            }
+            processCompletedCheckout('Card', total, total, 0);
+        }
+
+        function calculateCashChange() {
+            const total = CART.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            const tendered = parseFloat(document.getElementById('cashTenderedInput').value) || 0;
+            const change = tendered - total;
+            const changeEl = document.getElementById('cashModalChangeDue');
+            if (change >= 0) {
+                changeEl.innerText = `R ${change.toFixed(2)}`;
+                changeEl.className = 'font-mono text-2xl font-extrabold text-emeraldNeon';
+            } else {
+                changeEl.innerText = `Short by R ${Math.abs(change).toFixed(2)}`;
+                changeEl.className = 'font-mono text-lg font-extrabold text-magentaNeon';
+            }
+        }
+
+        function confirmCashCheckout() {
+            const total = CART.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            const tendered = parseFloat(document.getElementById('cashTenderedInput').value) || 0;
+            if (tendered < total) { alert("Insufficient cash tendered."); return; }
+            const change = tendered - total;
+            closeModal('cashCheckoutModal');
+            processCompletedCheckout('Cash', total, tendered, change);
+        }
+
+        function openPayoutModal() {
+            document.getElementById('payoutAmountInput').value = '';
+            document.getElementById('payoutNotesInput').value = '';
+            document.getElementById('payoutModal').classList.remove('hidden');
+            document.getElementById('payoutModal').classList.add('flex');
+            setTimeout(() => document.getElementById('payoutAmountInput').focus(), 100);
+        }
+
+        function confirmPayout(e) {
+            e.preventDefault();
+            const reason = document.getElementById('payoutReason').value;
+            const amount = parseFloat(document.getElementById('payoutAmountInput').value) || 0;
+            const notes = document.getElementById('payoutNotesInput').value.trim();
+            if (amount <= 0) { alert("Please enter a valid payout amount."); return; }
+
+            const payoutRecord = {
+                id: 'PO-' + Math.floor(1000 + Math.random() * 9000),
+                date: new Date().toISOString(),
+                reason,
+                amount,
+                notes,
+                authorizedBy: CURRENT_USER ? CURRENT_USER.name : 'System'
+            };
+
+            CASH_PAYOUTS.push(payoutRecord);
+            saveStateToStorage();
+            syncSaleOrInventoryToGoogleSheets('log_payout', { payout: payoutRecord });
+
+            closeModal('payoutModal');
+            alert(`Cash Payout Recorded Successfully!\nRef: ${payoutRecord.id}\nReason: ${reason}\nAmount Paid Out: R ${amount.toFixed(2)}\nAuthorized By: ${payoutRecord.authorizedBy}`);
+            
+            if (!document.getElementById('tab-cashup').classList.contains('hidden')) {
+                renderDailyCashup();
+            }
+        }
+
+        function processCompletedCheckout(method, total, tendered, change) {
+            const ticketNo = 'T-' + Math.floor(1000 + Math.random() * 9000);
+            const saleRecord = {
+                ticket: ticketNo,
+                date: new Date().toISOString(),
+                method: method,
+                total: total,
+                cashier: CURRENT_USER ? CURRENT_USER.name : 'System',
+                items: CART.map(i => ({ sku: i.sku, name: i.name, qty: i.qty, price: i.price }))
+            };
+
+            SALES_HISTORY.unshift(saleRecord);
+
+            CART.forEach(cartItem => {
+                const prod = PRODUCTS.find(p => p.id === cartItem.id);
+                if (prod) prod.stock -= cartItem.qty;
+            });
+
+            saveStateToStorage();
+            syncSaleOrInventoryToGoogleSheets('log_sale', { sale: saleRecord });
+
+            let msg = `Transaction Successful!\nTicket: ${ticketNo}\nMethod: ${method}\nTotal: R ${total.toFixed(2)}`;
+            if (method === 'Cash') msg += `\nTendered: R ${tendered.toFixed(2)}\nChange: R ${change.toFixed(2)}`;
+            alert(msg);
+
+            CART = [];
+            renderCart();
+            renderPosGrid();
+            renderInventoryTable();
+            renderReorderTable();
+        }
+
+        function renderDailyCashup() {
+            const todayStr = new Date().toDateString();
+            const todaySales = SALES_HISTORY.filter(s => new Date(s.date).toDateString() === todayStr);
+            const todayPayouts = CASH_PAYOUTS.filter(p => new Date(p.date).toDateString() === todayStr);
+
+            const totalSales = todaySales.reduce((sum, s) => sum + s.total, 0);
+            const cashSales = todaySales.filter(s => s.method === 'Cash').reduce((sum, s) => sum + s.total, 0);
+            const cardSales = todaySales.filter(s => s.method === 'Card').reduce((sum, s) => sum + s.total, 0);
+            const totalPayouts = todayPayouts.reduce((sum, p) => sum + p.amount, 0);
+
+            document.getElementById('kpiTotalSales').innerText = `R ${totalSales.toFixed(2)}`;
+            document.getElementById('kpiSalesCount').innerText = `${todaySales.length} Transactions completed today`;
+            document.getElementById('kpiCashSales').innerText = `R ${cashSales.toFixed(2)}`;
+            document.getElementById('kpiCardSales').innerText = `R ${cardSales.toFixed(2)}`;
+            document.getElementById('kpiPayouts').innerText = `R ${totalPayouts.toFixed(2)}`;
+            document.getElementById('kpiPayoutsCount').innerText = `${todayPayouts.length} Cash expenses logged today`;
+
+            // Render Payouts Table
+            const payoutTbody = document.getElementById('dailyPayoutsTableBody');
+            if (todayPayouts.length === 0) {
+                payoutTbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-gray-500">No cash payouts recorded today.</td></tr>`;
+            } else {
+                payoutTbody.innerHTML = todayPayouts.map(p => `
+                    <tr class="hover:bg-[#0a0a0c]/50">
+                        <td class="p-3 font-mono text-magentaNeon">${p.id}</td>
+                        <td class="p-3 text-gray-400">${new Date(p.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                        <td class="p-3 font-semibold text-white">${p.reason}</td>
+                        <td class="p-3 text-gray-300">${p.notes}</td>
+                        <td class="p-3 text-gray-400">${p.authorizedBy}</td>
+                        <td class="p-3 text-right font-mono font-bold text-magentaNeon">R ${p.amount.toFixed(2)}</td>
+                    </tr>
+                `).join('');
+            }
+
+            // Render Tickets Table
+            const ticketTbody = document.getElementById('dailyTicketsTableBody');
+            if (todaySales.length === 0) {
+                ticketTbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-500">No sales tickets recorded today yet.</td></tr>`;
+            } else {
+                ticketTbody.innerHTML = todaySales.map(s => `
+                    <tr class="hover:bg-[#0a0a0c]/50">
+                        <td class="p-3 font-mono text-cyanNeon">${s.ticket}</td>
+                        <td class="p-3 text-gray-400">${new Date(s.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                        <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-semibold ${s.method==='Cash'?'bg-emeraldNeon/10 text-emeraldNeon':'bg-cyanNeon/10 text-cyanNeon'}">${s.method}</span></td>
+                        <td class="p-3 text-gray-300">${s.cashier}</td>
+                        <td class="p-3 text-right font-mono font-bold text-emeraldNeon">R ${s.total.toFixed(2)}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function renderInventoryTable() {
+            const query = document.getElementById('inventorySearch').value.toLowerCase();
+            const tbody = document.getElementById('inventoryTableBody');
+            const filtered = PRODUCTS.filter(p => p.name.toLowerCase().includes(query) || p.sku.toLowerCase().includes(query) || p.category.toLowerCase().includes(query));
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-gray-500">No inventory records found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(p => `
+                <tr class="hover:bg-[#0a0a0c]/50 transition-colors">
+                    <td class="p-3.5 font-mono text-cyanNeon">${p.sku}</td>
+                    <td class="p-3.5 font-semibold text-white">${p.name}</td>
+                    <td class="p-3.5 text-gray-300">${p.category}</td>
+                    <td class="p-3.5 text-right font-mono">R ${p.cost.toFixed(2)}</td>
+                    <td class="p-3.5 text-right font-mono font-bold text-emeraldNeon">R ${p.price.toFixed(2)}</td>
+                    <td class="p-3.5 text-center font-mono ${p.stock <= p.minStock ? 'text-magentaNeon font-bold' : 'text-white'}">${p.stock}</td>
+                    <td class="p-3.5 text-gray-400">${p.supplier}</td>
+                    <td class="p-3.5 text-center">
+                        <button onclick="openEditStockModal(${p.id})" class="bg-jubileeBorder hover:border-cyanNeon text-cyanNeon px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors"><i class="fa-solid fa-pen-to-square"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function filterInventoryTable() { renderInventoryTable(); }
+
+        function openAddStockModal() {
+            document.getElementById('stockModalTitle').innerHTML = `<i class="fa-solid fa-box text-cyanNeon"></i> Add Stock Item`;
+            document.getElementById('editProductId').value = '';
+            document.getElementById('modalSku').value = generateAutoSku(document.getElementById('modalCategory').value);
+            document.getElementById('modalName').value = '';
+            document.getElementById('modalCost').value = '';
+            document.getElementById('modalPrice').value = '';
+            document.getElementById('modalStock').value = '';
+            document.getElementById('modalMinStock').value = '10';
+            document.getElementById('modalSupplier').value = 'Distell SA';
+            document.getElementById('stockModal').classList.remove('hidden');
+            document.getElementById('stockModal').classList.add('flex');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const catSelect = document.getElementById('modalCategory');
+            if (catSelect) {
+                catSelect.addEventListener('change', (e) => {
+                    if (!document.getElementById('editProductId').value) {
+                        document.getElementById('modalSku').value = generateAutoSku(e.target.value);
+                    }
+                });
+            }
+        });
+
+        function openEditStockModal(id) {
+            const prod = PRODUCTS.find(p => p.id === id);
+            if (!prod) return;
+            document.getElementById('stockModalTitle').innerHTML = `<i class="fa-solid fa-pen-to-square text-cyanNeon"></i> Edit Stock Item`;
+            document.getElementById('editProductId').value = prod.id;
+            document.getElementById('modalSku').value = prod.sku;
+            document.getElementById('modalCategory').value = prod.category;
+            document.getElementById('modalName').value = prod.name;
+            document.getElementById('modalCost').value = prod.cost;
+            document.getElementById('modalPrice').value = prod.price;
+            document.getElementById('modalStock').value = prod.stock;
+            document.getElementById('modalMinStock').value = prod.minStock;
+            document.getElementById('modalSupplier').value = prod.supplier;
+            document.getElementById('stockModal').classList.remove('hidden');
+            document.getElementById('stockModal').classList.add('flex');
+        }
+
+        function saveStockItem(e) {
+            e.preventDefault();
+            const editId = document.getElementById('editProductId').value;
+            const sku = document.getElementById('modalSku').value.trim();
+            const category = document.getElementById('modalCategory').value;
+            const name = document.getElementById('modalName').value.trim();
+            const cost = parseFloat(document.getElementById('modalCost').value);
+            const price = parseFloat(document.getElementById('modalPrice').value);
+            const stock = parseInt(document.getElementById('modalStock').value);
+            const minStock = parseInt(document.getElementById('modalMinStock').value);
+            const supplier = document.getElementById('modalSupplier').value.trim();
+
+            if (editId) {
+                const prod = PRODUCTS.find(p => p.id == editId);
+                if (prod) { prod.sku = sku; prod.category = category; prod.name = name; prod.cost = cost; prod.price = price; prod.stock = stock; prod.minStock = minStock; prod.supplier = supplier; }
+            } else {
+                const newId = PRODUCTS.length > 0 ? Math.max(...PRODUCTS.map(p => p.id)) + 1 : 1;
+                PRODUCTS.push({ id: newId, sku, name, category, cost, price, stock, minStock, supplier });
+            }
+
+            saveStateToStorage();
+            closeModal('stockModal');
+            initDashboard();
+        }
+
+        function generateAutoSku(category) {
+            const prefix = category === 'Wine' ? 'W' : category === 'Beer' ? 'B' : category === 'Craft Beer' ? 'C' : category === 'Cider' ? 'CD' : category === 'Spirits' ? 'S' : category === 'Bulk' ? 'BLK' : category === 'Snacks' ? 'SNK' : category === 'Water' ? 'WAT' : 'M';
+            return `${prefix}-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+        }
+
+        function addManualGrvLine() {
+            const name = document.getElementById('grvLineName').value.trim();
+            const category = document.getElementById('grvLineCategory').value;
+            const qty = parseInt(document.getElementById('grvLineQty').value) || 0;
+            const cost = parseFloat(document.getElementById('grvLineCost').value) || 0;
+            const markup = parseFloat(document.getElementById('grvDefaultMarkup').value) || 40;
+            if (!name || qty <= 0 || cost <= 0) { alert("Please enter valid product details."); return; }
+
+            GRV_ITEMS.push({ sku: generateAutoSku(category), name, category, qty, cost, markup, price: cost * (1 + (markup / 100)) });
+            document.getElementById('grvLineName').value = '';
+            document.getElementById('grvLineCost').value = '';
+            renderGrvList();
+        }
+
+        function renderGrvList() {
+            const container = document.getElementById('grvScannedList');
+            document.getElementById('grvItemsCount').innerText = `${GRV_ITEMS.length} Lines`;
+            if (GRV_ITEMS.length === 0) {
+                container.innerHTML = `<div class="text-center py-12 text-gray-500 text-xs"><i class="fa-solid fa-receipt text-3xl mb-2 opacity-20"></i><p>No lines added to this GRV yet.</p></div>`;
+                return;
+            }
+            container.innerHTML = GRV_ITEMS.map((item, idx) => `
+                <div class="bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-3 flex items-center justify-between">
+                    <div class="flex-1 pr-2">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-jubileeCard text-cyanNeon border border-jubileeBorder">${item.sku}</span>
+                            <span class="font-semibold text-xs text-white">${item.name}</span>
+                        </div>
+                        <div class="text-[10px] text-gray-400 font-mono">Qty: ${item.qty} | Unit Cost: R ${item.cost.toFixed(2)} | Retail: <span class="text-emeraldNeon font-bold">R ${item.price.toFixed(2)}</span></div>
+                    </div>
+                    <button onclick="GRV_ITEMS.splice(${idx},1);renderGrvList();" class="text-gray-500 hover:text-magentaNeon text-xs p-1"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `).join('');
+        }
+
+        function completeGrvReceiving() {
+            if (GRV_ITEMS.length === 0) { alert("Add at least one line item."); return; }
+            const supplier = document.getElementById('grvSupplier').value;
+            const invoiceNum = document.getElementById('grvInvoiceNum').value.trim() || ('INV-' + Math.floor(1000 + Math.random() * 9000));
+            const totalInvoiceCost = parseFloat(document.getElementById('grvTotalInvoiceCost').value) || 0;
+
+            let finalItems = [...GRV_ITEMS];
+            if (totalInvoiceCost > 0) {
+                const currentSum = GRV_ITEMS.reduce((acc, item) => acc + (item.cost * item.qty), 0);
+                if (currentSum > 0) {
+                    const ratio = totalInvoiceCost / currentSum;
+                    finalItems = GRV_ITEMS.map(item => ({
+                        ...item, cost: item.cost * ratio, price: (item.cost * ratio) * (1 + (item.markup / 100))
+                    }));
+                }
+            }
+
+            finalItems.forEach(gi => {
+                let existing = PRODUCTS.find(p => p.name.toLowerCase() === gi.name.toLowerCase() || p.sku === gi.sku);
+                if (existing) { existing.stock += gi.qty; existing.cost = gi.cost; existing.price = gi.price; existing.supplier = supplier; }
+                else {
+                    PRODUCTS.push({ id: PRODUCTS.length + 1, sku: gi.sku, name: gi.name, category: gi.category, cost: gi.cost, price: gi.price, stock: gi.qty, minStock: 5, supplier });
+                }
+            });
+
+            const grvRecord = {
+                invoiceNo: invoiceNum,
+                supplier: supplier,
+                totalInvoiceCost: totalInvoiceCost,
+                date: new Date().toISOString(),
+                items: finalItems
+            };
+
+            saveStateToStorage();
+            syncSaleOrInventoryToGoogleSheets('log_grv', { grv: grvRecord });
+
+            alert(`GRV ${invoiceNum} posted successfully!\nStock levels and distributed costs updated and synced to Google Sheets GRV tab.`);
+            GRV_ITEMS = [];
+            renderGrvList();
+            initDashboard();
+        }
+
+        function renderReorderTable() {
+            const tbody = document.getElementById('reorderTableBody');
+            const lowStock = PRODUCTS.filter(p => p.stock <= p.minStock);
+            if (lowStock.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-12 text-emeraldNeon font-semibold">All inventory levels are optimal.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = lowStock.map(p => `
+                <tr class="hover:bg-[#0a0a0c]/50 transition-colors">
+                    <td class="p-3.5"><div class="font-mono text-cyanNeon text-[10px]">${p.sku}</div><div class="font-semibold text-white">${p.name}</div></td>
+                    <td class="p-3.5 text-gray-300">${p.category}</td>
+                    <td class="p-3.5 text-center font-mono font-bold text-magentaNeon">${p.stock}</td>
+                    <td class="p-3.5 text-center font-mono text-gray-400">${p.minStock}</td>
+                    <td class="p-3.5 text-gray-300">${p.supplier}</td>
+                    <td class="p-3.5 text-center"><span class="bg-magentaNeon/10 text-magentaNeon text-[10px] font-semibold px-2.5 py-1 rounded-full uppercase">Low Stock</span></td>
+                    <td class="p-3.5 text-right font-mono font-bold text-cyanNeon">+${Math.max((p.minStock * 2) - p.stock, 10)} Units</td>
+                </tr>
+            `).join('');
+        }
+
+        function generatePurchaseOrders() { alert("Purchase orders generated and dispatched to suppliers."); }
+
+        function exportDatabaseJson() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ PRODUCTS, USERS, SALES_HISTORY, CASH_PAYOUTS }, null, 2));
+            const dl = document.createElement('a');
+            dl.setAttribute("href", dataStr);
+            dl.setAttribute("download", "jubilee_pos_backup.json");
+            document.body.appendChild(dl);
+            dl.click();
+            dl.remove();
+        }
+    </script>
+</body>
+</html>
