@@ -36,6 +36,28 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Html5-QRCode Scanner Library for Tablets & Phones -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+
+    <!-- Thermal Printer 80mm Receipt Print Styles -->
+    <style>
+        @media print {
+            body * { visibility: hidden !important; }
+            #printableReceiptArea, #printableReceiptArea * { visibility: visible !important; }
+            #printableReceiptArea {
+                display: block !important;
+                position: fixed !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 80mm !important;
+                background: #ffffff !important;
+                color: #000000 !important;
+                padding: 4mm !important;
+                font-family: 'Courier New', monospace !important;
+                font-size: 12px !important;
+                line-height: 1.4 !important;
+                margin: 0 !important;
+            }
+        }
+    </style>
 </head>
 <body class="bg-jubileeBg text-gray-100 font-sans antialiased h-screen overflow-hidden flex flex-col">
 
@@ -75,7 +97,7 @@
 
             <div class="pt-4 border-t border-jubileeBorder flex justify-between items-center text-xs">
                 <button onclick="openNewUserModal()" class="text-cyanNeon hover:underline"><i class="fa-solid fa-user-plus mr-1"></i> Add New Staff</button>
-                <span class="text-gray-500 font-mono">v3.6 Live Sheets & Payouts</span>
+                <span class="text-gray-500 font-mono">v3.7 Receipts, Alerts & Cash-Up</span>
             </div>
         </div>
     </div>
@@ -173,7 +195,7 @@
 
                     <div class="p-4 border-t border-jubileeBorder bg-[#0a0a0c] space-y-3 shrink-0">
                         <div class="space-y-1.5 text-xs">
-                            <div class="flex justify-between text-gray-400"><span>Subtotal</span><span id="cartSubtotal" class="font-mono text-white">R 0.00</span></div>
+                            <div class="flex justify-between text-gray-400"><span>Subtotal (Excl. VAT)</span><span id="cartSubtotal" class="font-mono text-white">R 0.00</span></div>
                             <div class="flex justify-between text-gray-400"><span>VAT (15% Included)</span><span id="cartVat" class="font-mono text-white">R 0.00</span></div>
                             <div class="flex justify-between text-base font-extrabold text-white pt-2 border-t border-jubileeBorder"><span>Total Due</span><span id="cartTotal" class="font-mono text-cyanNeon text-lg">R 0.00</span></div>
                         </div>
@@ -366,6 +388,34 @@
                         </div>
                     </div>
 
+                    <!-- DRAWER RECONCILIATION & Z-READ -->
+                    <div class="bg-jubileeCard border border-jubileeBorder rounded-2xl p-5 space-y-4">
+                        <div class="flex items-center justify-between pb-3 border-b border-jubileeBorder">
+                            <h3 class="font-bold text-sm text-white"><i class="fa-solid fa-vault text-emeraldNeon mr-2"></i> End-of-Shift Cash Drawer Reconciliation</h3>
+                            <button onclick="submitShiftCashUp()" class="bg-emeraldNeon text-gray-950 font-bold px-4 py-2 rounded-xl text-xs hover:opacity-90 transition-all">
+                                <i class="fa-solid fa-floppy-disk mr-1"></i> Save Cash-Up to Sheets
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+                            <div>
+                                <label class="block text-[10px] text-gray-400 uppercase mb-1">Opening Float (R)</label>
+                                <input type="number" step="0.01" id="cashupOpeningFloat" value="1000" oninput="updateCashupVariance()" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyanNeon" />
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-gray-400 uppercase mb-1">Expected Cash in Drawer</label>
+                                <div id="cashupExpectedDisplay" class="bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-sm font-mono font-bold text-cyanNeon">R 0.00</div>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-gray-400 uppercase mb-1">Actual Cash Counted (R)</label>
+                                <input type="number" step="0.01" id="cashupCountedInput" placeholder="0.00" oninput="updateCashupVariance()" class="w-full bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-sm font-mono text-emeraldNeon focus:outline-none focus:border-cyanNeon" />
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-gray-400 uppercase mb-1">Over / Short Variance</label>
+                                <div id="cashupVarianceDisplay" class="bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-sm font-mono font-bold text-gray-300">R 0.00</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- PAYOUTS LOG TABLE -->
                     <div class="bg-jubileeCard border border-jubileeBorder rounded-2xl p-5 space-y-4">
                         <div class="flex items-center justify-between pb-3 border-b border-jubileeBorder">
@@ -421,10 +471,10 @@
                 <div class="flex justify-between items-center mb-6 shrink-0">
                     <div>
                         <h2 class="text-xl font-bold text-white">Inventory Reorder System</h2>
-                        <p class="text-xs text-gray-400">Automated stock replenishment alerts and purchase order generation.</p>
+                        <p class="text-xs text-gray-400">Automated stock replenishment alerts grouped by supplier.</p>
                     </div>
                     <button onclick="generatePurchaseOrders()" class="bg-cyanNeon text-gray-950 font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow hover:opacity-90">
-                        <i class="fa-solid fa-file-invoice mr-1.5"></i> Generate Purchase Orders
+                        <i class="fa-solid fa-copy mr-1.5"></i> Copy Supplier Order List
                     </button>
                 </div>
 
@@ -480,6 +530,35 @@
             </div>
         </div>
     </div>
+
+    <!-- RECEIPT MODAL (PRINT & WHATSAPP) -->
+    <div id="receiptModal" class="fixed inset-0 z-50 bg-jubileeBg/90 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-jubileeCard border border-jubileeBorder rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-jubileeBorder">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-receipt text-emeraldNeon"></i>
+                    <h3 class="font-bold text-sm text-white">Sale Complete — Receipt</h3>
+                </div>
+                <button onclick="closeModal('receiptModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <!-- Receipt Paper Preview -->
+            <pre id="receiptPreviewText" class="bg-white text-black font-mono text-[11px] p-4 rounded-xl overflow-x-auto whitespace-pre-wrap leading-relaxed shadow-inner"></pre>
+
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="window.print()" class="bg-cyanNeon text-gray-950 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:opacity-90">
+                    <i class="fa-solid fa-print"></i> Print Slip
+                </button>
+                <a id="whatsappReceiptLink" href="#" target="_blank" class="bg-emeraldNeon text-gray-950 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:opacity-90">
+                    <i class="fa-brands fa-whatsapp text-sm"></i> WhatsApp
+                </a>
+            </div>
+            <button onclick="closeModal('receiptModal')" class="w-full bg-[#0a0a0c] border border-jubileeBorder text-gray-300 font-bold py-2.5 rounded-xl text-xs">Done / Next Customer</button>
+        </div>
+    </div>
+
+    <!-- HIDDEN THERMAL PRINT CONTAINER -->
+    <pre id="printableReceiptArea" class="hidden"></pre>
 
     <!-- CASH PAYOUT / EXPENSE MODAL -->
     <div id="payoutModal" class="fixed inset-0 z-50 bg-jubileeBg/90 backdrop-blur-sm hidden items-center justify-center p-4">
@@ -750,7 +829,7 @@
         </div>
     </div>
 
-    <!-- SCRIPT LOGIC -->
+    <!-- MAIN POS SCRIPT LOGIC -->
     <script>
         // --- GLOBAL STATE & MASTER PRODUCTS ---
         let USERS = [];
@@ -797,6 +876,10 @@
         let barcodeBuffer = '';
         let barcodeTimer = null;
 
+        let CURRENT_DAY_CASH_SALES = 0;
+        let CURRENT_DAY_CARD_SALES = 0;
+        let CURRENT_DAY_PAYOUTS = 0;
+
         window.addEventListener('DOMContentLoaded', () => {
             loadSavedState();
             if (USERS.length === 0) {
@@ -806,10 +889,41 @@
             populateUserSelect();
             populateSupplierSelect();
             setupHardwareScannerListener();
-
-            // Attempt initial pull from Google Sheets Web App
             pullDataFromGoogleSheets();
         });
+
+        // --- VAT & RECEIPT FORMATTERS ---
+        function extractVat(inclVatAmount) {
+            const amount = Number(inclVatAmount || 0);
+            return Number((amount - (amount / 1.15)).toFixed(2));
+        }
+
+        function buildReceiptText(businessName, sale) {
+            const vat = extractVat(sale.total);
+            const lines = [
+                String(businessName || "JUBILEE HOTEL & BOTTLE STORE").toUpperCase(),
+                "Ticket:  " + sale.ticket,
+                "Date:    " + new Date(sale.date || Date.now()).toLocaleString("en-ZA"),
+                "Cashier: " + (sale.cashier || "Staff"),
+                "--------------------------------",
+                ...(sale.items || []).map(
+                    (i) => `${i.qty}x ${String(i.name).slice(0, 18).padEnd(18)} R${(Number(i.qty) * Number(i.price)).toFixed(2)}`
+                ),
+                "--------------------------------",
+                `VAT (15% incl.):       R${vat.toFixed(2)}`,
+                `TOTAL DUE:             R${Number(sale.total || 0).toFixed(2)}`,
+                `Payment Method:        ${sale.method}`,
+            ];
+
+            if (sale.method === "Cash" && sale.tendered !== undefined) {
+                lines.push(`Cash Tendered:         R${Number(sale.tendered).toFixed(2)}`);
+                lines.push(`Change Given:          R${Number(sale.changeDue || 0).toFixed(2)}`);
+            }
+
+            lines.push("--------------------------------");
+            lines.push("Thank you for your support!");
+            return lines.join("\n");
+        }
 
         // --- HARDWARE BARCODE SCANNER LISTENER ---
         function setupHardwareScannerListener() {
@@ -892,7 +1006,7 @@
             try {
                 const res = await fetch(url);
                 const data = await res.json();
-                if (data.status === 'success' && data.products && data.products.length > 0) {
+                if ((data.status === 'success' || data.status === 'ok') && data.products && data.products.length > 0) {
                     PRODUCTS = data.products.map((p, index) => ({
                         id: index + 1,
                         sku: String(p.sku),
@@ -901,13 +1015,13 @@
                         cost: parseFloat(p.cost) || 0,
                         price: parseFloat(p.price) || 0,
                         stock: parseInt(p.stock) || 0,
-                        minStock: parseInt(p.minStock) || 10,
+                        minStock: parseInt(p.minReorder ?? p.minStock) || 10,
                         supplier: p.supplier || 'Distell SA'
                     }));
                     renderPosGrid();
                     renderInventoryTable();
                     renderReorderTable();
-                    console.log("Successfully synchronized products from Google Sheets Web App!");
+                    updateReorderBadge();
                 }
             } catch (err) {
                 console.warn("Google Sheets live pull notice (CORS/offline mode):", err);
@@ -1103,6 +1217,8 @@
             const activeBtn = document.getElementById(`tabBtn-${tabName}`);
             if (activeBtn) activeBtn.className = "px-4 py-2 rounded-xl text-xs font-semibold transition-all bg-cyanNeon text-gray-950 shadow";
 
+            updateReorderBadge();
+
             if (tabName === 'cashup') {
                 renderDailyCashup();
             }
@@ -1112,6 +1228,7 @@
             renderPosGrid();
             renderInventoryTable();
             renderReorderTable();
+            updateReorderBadge();
         }
 
         function setPosCategory(cat) {
@@ -1213,11 +1330,12 @@
                 </div>
             `).join('');
 
-            const subtotal = CART.reduce((sum, item) => sum + (item.price * item.qty), 0);
-            const vat = subtotal * 0.15;
-            document.getElementById('cartSubtotal').innerText = `R ${subtotal.toFixed(2)}`;
+            const totalIncl = CART.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            const vat = extractVat(totalIncl);
+            const subtotalExcl = totalIncl - vat;
+            document.getElementById('cartSubtotal').innerText = `R ${subtotalExcl.toFixed(2)}`;
             document.getElementById('cartVat').innerText = `R ${vat.toFixed(2)}`;
-            document.getElementById('cartTotal').innerText = `R ${subtotal.toFixed(2)}`;
+            document.getElementById('cartTotal').innerText = `R ${totalIncl.toFixed(2)}`;
         }
 
         function checkout(method) {
@@ -1301,6 +1419,8 @@
                 date: new Date().toISOString(),
                 method: method,
                 total: total,
+                tendered: tendered,
+                changeDue: change,
                 cashier: CURRENT_USER ? CURRENT_USER.name : 'System',
                 items: CART.map(i => ({ sku: i.sku, name: i.name, qty: i.qty, price: i.price }))
             };
@@ -1309,39 +1429,48 @@
 
             CART.forEach(cartItem => {
                 const prod = PRODUCTS.find(p => p.id === cartItem.id);
-                if (prod) prod.stock -= cartItem.qty;
+                if (prod) prod.stock = Math.max(0, prod.stock - cartItem.qty);
             });
 
             saveStateToStorage();
             syncSaleOrInventoryToGoogleSheets('log_sale', { sale: saleRecord });
 
-            let msg = `Transaction Successful!\nTicket: ${ticketNo}\nMethod: ${method}\nTotal: R ${total.toFixed(2)}`;
-            if (method === 'Cash') msg += `\nTendered: R ${tendered.toFixed(2)}\nChange: R ${change.toFixed(2)}`;
-            alert(msg);
+            // Populate Print & WhatsApp Receipt Modal
+            const receiptText = buildReceiptText("JUBILEE HOTEL & BOTTLE STORE", saleRecord);
+            document.getElementById('receiptPreviewText').innerText = receiptText;
+            document.getElementById('printableReceiptArea').innerText = receiptText;
+            document.getElementById('whatsappReceiptLink').href = "https://wa.me/?text=" + encodeURIComponent(receiptText);
+
+            document.getElementById('receiptModal').classList.remove('hidden');
+            document.getElementById('receiptModal').classList.add('flex');
 
             CART = [];
             renderCart();
             renderPosGrid();
             renderInventoryTable();
             renderReorderTable();
+            updateReorderBadge();
         }
 
+        // --- END-OF-SHIFT CASH-UP & RECONCILIATION ---
         function renderDailyCashup() {
             const todayStr = new Date().toDateString();
             const todaySales = SALES_HISTORY.filter(s => new Date(s.date).toDateString() === todayStr);
             const todayPayouts = CASH_PAYOUTS.filter(p => new Date(p.date).toDateString() === todayStr);
 
             const totalSales = todaySales.reduce((sum, s) => sum + s.total, 0);
-            const cashSales = todaySales.filter(s => s.method === 'Cash').reduce((sum, s) => sum + s.total, 0);
-            const cardSales = todaySales.filter(s => s.method === 'Card').reduce((sum, s) => sum + s.total, 0);
-            const totalPayouts = todayPayouts.reduce((sum, p) => sum + p.amount, 0);
+            CURRENT_DAY_CASH_SALES = todaySales.filter(s => s.method === 'Cash').reduce((sum, s) => sum + s.total, 0);
+            CURRENT_DAY_CARD_SALES = todaySales.filter(s => s.method === 'Card').reduce((sum, s) => sum + s.total, 0);
+            CURRENT_DAY_PAYOUTS = todayPayouts.reduce((sum, p) => sum + p.amount, 0);
 
             document.getElementById('kpiTotalSales').innerText = `R ${totalSales.toFixed(2)}`;
             document.getElementById('kpiSalesCount').innerText = `${todaySales.length} Transactions completed today`;
-            document.getElementById('kpiCashSales').innerText = `R ${cashSales.toFixed(2)}`;
-            document.getElementById('kpiCardSales').innerText = `R ${cardSales.toFixed(2)}`;
-            document.getElementById('kpiPayouts').innerText = `R ${totalPayouts.toFixed(2)}`;
+            document.getElementById('kpiCashSales').innerText = `R ${CURRENT_DAY_CASH_SALES.toFixed(2)}`;
+            document.getElementById('kpiCardSales').innerText = `R ${CURRENT_DAY_CARD_SALES.toFixed(2)}`;
+            document.getElementById('kpiPayouts').innerText = `R ${CURRENT_DAY_PAYOUTS.toFixed(2)}`;
             document.getElementById('kpiPayoutsCount').innerText = `${todayPayouts.length} Cash expenses logged today`;
+
+            updateCashupVariance();
 
             // Render Payouts Table
             const payoutTbody = document.getElementById('dailyPayoutsTableBody');
@@ -1377,6 +1506,44 @@
             }
         }
 
+        function updateCashupVariance() {
+            const openingFloat = parseFloat(document.getElementById('cashupOpeningFloat')?.value) || 0;
+            const countedCash = parseFloat(document.getElementById('cashupCountedInput')?.value) || 0;
+            const expectedCash = openingFloat + CURRENT_DAY_CASH_SALES - CURRENT_DAY_PAYOUTS;
+            const variance = countedCash - expectedCash;
+
+            const expEl = document.getElementById('cashupExpectedDisplay');
+            const varEl = document.getElementById('cashupVarianceDisplay');
+            if (expEl) expEl.innerText = `R ${expectedCash.toFixed(2)}`;
+            if (varEl) {
+                varEl.innerText = `${variance >= 0 ? '+' : ''}R ${variance.toFixed(2)}`;
+                varEl.className = 'bg-[#0a0a0c] border border-jubileeBorder rounded-xl p-2.5 text-sm font-mono font-bold ' +
+                    (variance === 0 ? 'text-emeraldNeon' : variance > 0 ? 'text-cyanNeon' : 'text-magentaNeon');
+            }
+        }
+
+        function submitShiftCashUp() {
+            const openingFloat = parseFloat(document.getElementById('cashupOpeningFloat')?.value) || 0;
+            const countedCash = parseFloat(document.getElementById('cashupCountedInput')?.value) || 0;
+            const expectedCash = openingFloat + CURRENT_DAY_CASH_SALES - CURRENT_DAY_PAYOUTS;
+            const variance = countedCash - expectedCash;
+
+            const cashupPayload = {
+                cashier: CURRENT_USER ? CURRENT_USER.name : 'System',
+                openingFloat,
+                cashSales: CURRENT_DAY_CASH_SALES,
+                cardSales: CURRENT_DAY_CARD_SALES,
+                payouts: CURRENT_DAY_PAYOUTS,
+                expectedCash,
+                countedCash,
+                variance
+            };
+
+            syncSaleOrInventoryToGoogleSheets('log_cashup', { cashup: cashupPayload });
+            alert(`Cash-Up Saved to Google Sheets!\nExpected Cash: R ${expectedCash.toFixed(2)}\nCounted Cash: R ${countedCash.toFixed(2)}\nVariance: R ${variance.toFixed(2)}`);
+        }
+
+        // --- INVENTORY & REORDER SYSTEM ---
         function renderInventoryTable() {
             const query = document.getElementById('inventorySearch').value.toLowerCase();
             const tbody = document.getElementById('inventoryTableBody');
@@ -1554,6 +1721,16 @@
             initDashboard();
         }
 
+        function updateReorderBadge() {
+            const btn = document.getElementById('tabBtn-reorder');
+            if (!btn) return;
+            const lowCount = PRODUCTS.filter(p => Number(p.stock) <= Number(p.minStock)).length;
+            const isActive = !document.getElementById('tab-reorder').classList.contains('hidden');
+            btn.innerHTML = lowCount > 0
+                ? `Reorder System <span class="ml-1.5 ${isActive ? 'bg-gray-950 text-cyanNeon' : 'bg-magentaNeon text-white'} text-[10px] font-bold px-1.5 py-0.5 rounded-full">${lowCount}</span>`
+                : `Reorder System`;
+        }
+
         function renderReorderTable() {
             const tbody = document.getElementById('reorderTableBody');
             const lowStock = PRODUCTS.filter(p => p.stock <= p.minStock);
@@ -1574,7 +1751,29 @@
             `).join('');
         }
 
-        function generatePurchaseOrders() { alert("Purchase orders generated and dispatched to suppliers."); }
+        function generatePurchaseOrders() {
+            const lowItems = PRODUCTS.filter(p => Number(p.stock) <= Number(p.minStock));
+            if (lowItems.length === 0) {
+                alert("All stock levels are above minimum thresholds.");
+                return;
+            }
+            const grouped = lowItems.reduce((acc, item) => {
+                const sup = item.supplier || "General Supplier";
+                if (!acc[sup]) acc[sup] = [];
+                const orderQty = Math.max((item.minStock * 2) - item.stock, 10);
+                acc[sup].push(`- ${item.name} (${item.sku}): Order ${orderQty} units (In stock: ${item.stock})`);
+                return acc;
+            }, {});
+
+            const summary = Object.entries(grouped)
+                .map(([supplier, lines]) => `*${supplier.toUpperCase()}*\n${lines.join("\n")}`)
+                .join("\n\n");
+
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(summary).catch(() => {});
+            }
+            alert("Supplier Purchase Order List (copied to clipboard!):\n\n" + summary);
+        }
 
         function exportDatabaseJson() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ PRODUCTS, USERS, SALES_HISTORY, CASH_PAYOUTS }, null, 2));
@@ -1591,172 +1790,91 @@
             window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(console.warn));
         }
     </script>
-<script>
-  // Give each tablet/till a unique device ID so you know which till rang up the sale
-  const DEVICE_ID = localStorage.getItem('jubilee_device_id') || (() => {
-    const id = 'TILL-' + Math.random().toString(36).substring(2, 6).toUpperCase();
-    localStorage.setItem('jubilee_device_id', id);
-    return id;
-  })();
 
-  let isSyncing = false;
+    <!-- OFFLINE QUEUE & DEVICE ID SYNC SCRIPT -->
+    <script>
+        const DEVICE_ID = localStorage.getItem('jubilee_device_id') || (() => {
+            const id = 'TILL-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+            localStorage.setItem('jubilee_device_id', id);
+            return id;
+        })();
 
-  // 1. Register Service Worker for offline loading
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(console.error);
-  }
+        let isSyncing = false;
 
-  // 2. Call this when completing a SALE, PAYOUT, or GRV
-  function queueOfflineTransaction(type, data) {
-    const queue = JSON.parse(localStorage.getItem('jubilee_sync_queue') || '[]');
-    queue.push({
-      id: crypto.randomUUID(),
-      type: type, // 'SALE', 'PAYOUT', or 'GRV'
-      deviceId: DEVICE_ID,
-      timestamp: new Date().toISOString(),
-      cashier: document.getElementById('currentUserDisplay')?.innerText || 'Unknown',
-      ...data
-    });
-    localStorage.setItem('jubilee_sync_queue', JSON.stringify(queue));
-    updateCloudBadge();
-    autoSyncWithGoogle(); // Syncs immediately if online, or waits silently if offline
-  }
+        function queueOfflineTransaction(type, data) {
+            const queue = JSON.parse(localStorage.getItem('jubilee_sync_queue') || '[]');
+            queue.push({
+                id: crypto.randomUUID(),
+                type: type,
+                deviceId: DEVICE_ID,
+                timestamp: new Date().toISOString(),
+                cashier: document.getElementById('currentUserDisplay')?.innerText || 'Unknown',
+                ...data
+            });
+            localStorage.setItem('jubilee_sync_queue', JSON.stringify(queue));
+            updateCloudBadge();
+            autoSyncWithGoogle();
+        }
 
-  // 3. Automatic Background Sync
-  async function autoSyncWithGoogle() {
-    const scriptUrl = localStorage.getItem('jubilee_google_script_url');
-    if (!scriptUrl || !navigator.onLine || isSyncing) {
-      updateCloudBadge();
-      return;
-    }
+        async function autoSyncWithGoogle() {
+            const scriptUrl = localStorage.getItem('jubilee_google_script_url');
+            if (!scriptUrl || !navigator.onLine || isSyncing) {
+                updateCloudBadge();
+                return;
+            }
 
-    const queue = JSON.parse(localStorage.getItem('jubilee_sync_queue') || '[]');
-    isSyncing = true;
-    updateCloudBadge('syncing');
+            const queue = JSON.parse(localStorage.getItem('jubilee_sync_queue') || '[]');
+            isSyncing = true;
+            updateCloudBadge('syncing');
 
-    try {
-      const res = await fetch(scriptUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ queue })
-      });
-      const data = await res.json();
+            try {
+                const res = await fetch(scriptUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ queue })
+                });
+                const data = await res.json();
 
-      if (data.status === 'success') {
-        // Remove synced items from local queue
-        const remaining = queue.filter(item => !data.syncedIds.includes(item.id));
-        localStorage.setItem('jubilee_sync_queue', JSON.stringify(remaining));
+                if (data.status === 'success') {
+                    const remaining = queue.filter(item => !data.syncedIds.includes(item.id));
+                    localStorage.setItem('jubilee_sync_queue', JSON.stringify(remaining));
 
-        // Update local inventory & staff cache if returned from Sheets
-        if (data.inventory?.length) localStorage.setItem('jubilee_inventory', JSON.stringify(data.inventory));
-        if (data.staff?.length) localStorage.setItem('jubilee_staff', JSON.stringify(data.staff));
-      }
-    } catch (err) {
-      console.warn('Wi-Fi unstable; items safely stored locally for next retry.');
-    } finally {
-      isSyncing = false;
-      updateCloudBadge();
-    }
-  }
+                    if (data.inventory?.length) localStorage.setItem('jubilee_inventory', JSON.stringify(data.inventory));
+                    if (data.staff?.length) localStorage.setItem('jubilee_staff', JSON.stringify(data.staff));
+                }
+            } catch (err) {
+                console.warn('Wi-Fi unstable; items safely stored locally for next retry.');
+            } finally {
+                isSyncing = false;
+                updateCloudBadge();
+            }
+        }
 
-  // 4. Update the #cloudStatusBadge dot in your header
-  function updateCloudBadge(state) {
-    const badge = document.getElementById('cloudStatusBadge');
-    if (!badge) return;
-    const queue = JSON.parse(localStorage.getItem('jubilee_sync_queue') || '[]');
+        function updateCloudBadge(state) {
+            const badge = document.getElementById('cloudStatusBadge');
+            if (!badge) return;
+            const queue = JSON.parse(localStorage.getItem('jubilee_sync_queue') || '[]');
 
-    badge.className = 'w-2.5 h-2.5 rounded-full transition-colors ';
-    if (state === 'syncing') {
-      badge.className += 'bg-cyanNeon animate-ping';
-      badge.title = 'Syncing to Google Drive & Sheets...';
-    } else if (!navigator.onLine) {
-      badge.className += 'bg-magentaNeon'; // Pink/Red = Offline (queued)
-      badge.title = `Offline (${queue.length} waiting to backup)`;
-    } else if (queue.length > 0) {
-      badge.className += 'bg-amber-400'; // Yellow = Online, pending sync
-      badge.title = `${queue.length} items pending sync`;
-    } else {
-      badge.className += 'bg-emeraldNeon'; // Green = All backed up
-      badge.title = 'All data synced to Google Sheets & Drive';
-    }
-  }
+            badge.className = 'w-2.5 h-2.5 rounded-full transition-colors ';
+            if (state === 'syncing') {
+                badge.className += 'bg-cyanNeon animate-ping';
+                badge.title = 'Syncing to Google Drive & Sheets...';
+            } else if (!navigator.onLine) {
+                badge.className += 'bg-magentaNeon';
+                badge.title = `Offline (${queue.length} waiting to backup)`;
+            } else if (queue.length > 0) {
+                badge.className += 'bg-amber-400';
+                badge.title = `${queue.length} items pending sync`;
+            } else {
+                badge.className += 'bg-emeraldNeon';
+                badge.title = 'All data synced to Google Sheets & Drive';
+            }
+        }
 
-  // Auto-trigger when Wi-Fi reconnects + check every 20 seconds
-  window.addEventListener('online', autoSyncWithGoogle);
-  window.addEventListener('offline', () => updateCloudBadge());
-  setInterval(autoSyncWithGoogle, 20000);
-  document.addEventListener('DOMContentLoaded', () => updateCloudBadge());
-</script>
-// 1. VAT MATH (15% SA VAT included in price)
-function extractVat(inclVatAmount) {
-  const amount = Number(inclVatAmount || 0);
-  const exclVat = amount / 1.15;
-  return Number((amount - exclVat).toFixed(2));
-}
-
-// 2. RECEIPT TEXT + WHATSAPP LINK
-function buildReceiptText(businessName, sale) {
-  const vat = extractVat(sale.total);
-  const lines = [
-    String(businessName || "JUBILEE POS").toUpperCase(),
-    "Ticket: " + sale.ticket,
-    "Date: " + new Date(sale.date || Date.now()).toLocaleString("en-ZA"),
-    "Cashier: " + (sale.cashier || "Staff"),
-    "--------------------------------",
-    ...(sale.items || []).map(
-      (i) => `${i.qty}x ${String(i.name).slice(0, 18)}  R${(Number(i.qty) * Number(i.price)).toFixed(2)}`
-    ),
-    "--------------------------------",
-    "VAT (15% incl.):        R" + vat.toFixed(2),
-    "TOTAL:                  R" + Number(sale.total || 0).toFixed(2),
-    "Paid (" + sale.method + ")",
-  ];
-
-  if (sale.method === "Cash" && sale.tendered !== undefined) {
-    lines.push("Cash Tendered:          R" + Number(sale.tendered).toFixed(2));
-    lines.push("Change:                 R" + Number(sale.changeDue || 0).toFixed(2));
-  }
-
-  lines.push("Thank you!");
-  return lines.join("\n");
-}
-
-function getWhatsAppReceiptUrl(businessName, sale) {
-  const text = buildReceiptText(businessName, sale);
-  return "https://wa.me/?text=" + encodeURIComponent(text);
-}
-
-// 3. LOW-STOCK ALERTS GROUPED BY SUPPLIER
-function getLowStockBySupplier(products) {
-  const lowItems = (products || []).filter(
-    (p) => Number(p.stock) <= Number(p.minReorder)
-  );
-
-  return lowItems.reduce((groups, item) => {
-    const supplier = item.supplier || "Other Supplier";
-    if (!groups[supplier]) groups[supplier] = [];
-    groups[supplier].push(item);
-    return groups;
-  }, {});
-}
-
-// 4. END-OF-SHIFT CASH-UP MATH
-function calculateCashUp({ openingFloat, cashSales, cardSales, payouts, countedCash }) {
-  const open = Number(openingFloat || 0);
-  const cash = Number(cashSales || 0);
-  const card = Number(cardSales || 0);
-  const out = Number(payouts || 0);
-  const counted = Number(countedCash || 0);
-
-  const expectedCash = Number((open + cash - out).toFixed(2));
-  const variance = Number((counted - expectedCash).toFixed(2));
-
-  return {
-    expectedCash,
-    countedCash: counted,
-    variance, // + means extra cash in drawer, - means short
-    totalSales: Number((cash + card).toFixed(2)),
-  };
-}    
+        window.addEventListener('online', autoSyncWithGoogle);
+        window.addEventListener('offline', () => updateCloudBadge());
+        setInterval(autoSyncWithGoogle, 20000);
+        document.addEventListener('DOMContentLoaded', () => updateCloudBadge());
+    </script>
 </body>
 </html>
