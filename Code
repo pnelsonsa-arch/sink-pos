@@ -1,0 +1,83 @@
+/**
+ * Jubilee POS - Apps Script as a DATA API only (for the Cloudflare-hosted app).
+ * Deploy: Deploy > New deployment > Web app > Execute as: Me > Access: Anyone.
+ * Paste the /exec URL into the app's Sheets URL box.
+ */
+const HEAD = {
+  Inventory: ['sku', 'name', 'category', 'cost', 'price', 'stock', 'minStock', 'supplier'],
+  Sales: ['ticket', 'date', 'method', 'total', 'cashier', 'itemsJson'],
+  Payouts: ['id', 'date', 'reason', 'amount', 'notes', 'authorizedBy'],
+  GRV: ['invoiceNo', 'date', 'supplier', 'totalInvoiceCost', 'itemsJson']
+};
+
+function doGet() {
+  return out_({ status: 'success', products: read_('Inventory') });
+}
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const b = JSON.parse(e.postData.contents);
+    if (b.action === 'sync_inventory') {
+      write_('Inventory', (b.products || []).map(p => [p.sku, p.name, p.category, p.cost, p.price, p.stock, p.minStock, p.supplier]));
+    } else if (b.action === 'log_sale') {
+      const s = b.sale; append_('Sales', [s.ticket, s.date, s.method, s.total, s.cashier, JSON.stringify(s.items || [])]);
+    } else if (b.action === 'log_payout') {
+      const p = b.payout; append_('Payouts', [p.id, p.date, p.reason, p.amount, p.notes, p.authorizedBy]);
+    } else if (b.action === 'log_grv') {
+      const g = b.grv; append_('GRV', [g.invoiceNo, g.date, g.supplier, g.totalInvoiceCost, JSON.stringify(g.items || [])]);
+    }
+    return out_({ status: 'success' });
+  } catch (err) {
+    return out_({ status: 'error', message: String(err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function out_(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function ss_() {
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (ss) return ss;
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('SPREADSHEET_ID');
+  if (id) return SpreadsheetApp.openById(id);
+  ss = SpreadsheetApp.create('Jubilee POS Data');
+  props.setProperty('SPREADSHEET_ID', ss.getId());
+  return ss;
+}
+
+function sheet_(name) {
+  const ss = ss_();
+  let sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, HEAD[name].length).setValues([HEAD[name]]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    sh.getRange(2, 1, sh.getMaxRows() - 1, 2).setNumberFormat('@'); // keep SKUs/dates as text
+  }
+  return sh;
+}
+
+function read_(name) {
+  const sh = sheet_(name), last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, HEAD[name].length).getValues()
+    .filter(r => r[0] !== '')
+    .map(r => { const o = {}; HEAD[name].forEach((c, i) => o[c] = r[i]); return o; });
+}
+
+function write_(name, rows) {
+  const sh = sheet_(name), w = HEAD[name].length, last = sh.getLastRow();
+  if (last > 1) sh.getRange(2, 1, last - 1, w).clearContent();
+  if (rows.length) sh.getRange(2, 1, rows.length, w).setValues(rows);
+}
+
+function append_(name, row) {
+  const sh = sheet_(name);
+  sh.getRange(sh.getLastRow() + 1, 1, 1, row.length).setValues([row]);
+}
