@@ -1,83 +1,286 @@
 /**
- * Jubilee POS - Apps Script as a DATA API only (for the Cloudflare-hosted app).
- * Deploy: Deploy > New deployment > Web app > Execute as: Me > Access: Anyone.
- * Paste the /exec URL into the app's Sheets URL box.
+ * Jubilee POS - Google Sheets + Google Drive back end
+ *
+ * Paste this whole file into the Apps Script editor of your Google Sheet
+ * (Extensions > Apps Script), then:
+ *   1. Run setup() once and approve the permissions (Sheets + Drive).
+ *   2. Deploy > New deployment > Web app > Execute as: Me, Who has access: Anyone.
+ *      (If you already have a deployment: Deploy > Manage deployments > Edit > New version.)
+ *   3. Paste the /exec URL into the POS (Sheets & Cloud Sync) if it changed.
+ *   4. Optional: run installDailyBackup() once for an automatic nightly backup to Drive.
  */
-const HEAD = {
-  Inventory: ['sku', 'name', 'category', 'cost', 'price', 'stock', 'minStock', 'supplier'],
-  Sales: ['ticket', 'date', 'method', 'total', 'cashier', 'itemsJson'],
-  Payouts: ['id', 'date', 'reason', 'amount', 'notes', 'authorizedBy'],
-  GRV: ['invoiceNo', 'date', 'supplier', 'totalInvoiceCost', 'itemsJson']
-};
 
-function doGet() {
-  return out_({ status: 'success', products: read_('Inventory') });
+var TABS = {
+  Products:        ['sku', 'name', 'category', 'cost', 'price', 'stock', 'minStock', 'supplier'],
+  POS_Sales:       ['eventId', 'date', 'ticket', 'method', 'total', 'cashier', 'terminal', 'items'],
+  POS_Payouts:     ['eventId', 'date', 'ref', 'reason', 'amount', 'notes', 'authorizedBy', 'terminal'],
+  POS_GRV:         ['eventId', 'date', 'invoiceNo', 'supplier', 'totalInvoiceCost', 'terminal', 'items'],
+  POS_Adjustments: ['eventId', 'date', 'sku', 'delta', 'reason', 'terminal'],
+  POS_Events:      ['eventId', 'type', 'date', 'terminal']
+};
+var BACKUP_FOLDER = 'Jubilee POS Backups';
+var KEEP_BACKUPS = 30;
+var RECENT_DAYS = 3;
+
+function setup() {
+  Object.keys(TABS).forEach(function (n) { getTab_(n); });
+  DriveApp.getRootFolder(); // triggers the Drive permission prompt
+}
+
+function doGet(e) {
+  return json_(stateResponse_());
 }
 
 function doPost(e) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (err) { return json_({ status: 'error', message: 'Server busy, retry' }); }
   try {
-    const b = JSON.parse(e.postData.contents);
-    if (b.action === 'sync_inventory') {
-      write_('Inventory', (b.products || []).map(p => [p.sku, p.name, p.category, p.cost, p.price, p.stock, p.minStock, p.supplier]));
-    } else if (b.action === 'log_sale') {
-      const s = b.sale; append_('Sales', [s.ticket, s.date, s.method, s.total, s.cashier, JSON.stringify(s.items || [])]);
-    } else if (b.action === 'log_payout') {
-      const p = b.payout; append_('Payouts', [p.id, p.date, p.reason, p.amount, p.notes, p.authorizedBy]);
-    } else if (b.action === 'log_grv') {
-      const g = b.grv; append_('GRV', [g.invoiceNo, g.date, g.supplier, g.totalInvoiceCost, JSON.stringify(g.items || [])]);
-    }
-    return out_({ status: 'success' });
+    var body = JSON.parse(e.postData.contents);
+    if (body.action === 'batch') return json_(processBatch_(body.events || []));
+    if (body.action === 'backup') return json_(doBackup_());
+    return json_({ status: 'error', message: 'Unknown action' });
   } catch (err) {
-    return out_({ status: 'error', message: String(err) });
+    return json_({ status: 'error', message: String(err) });
   } finally {
     lock.releaseLock();
   }
 }
 
-function out_(o) {
-  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+/* ---------------- core: apply a batch of events ---------------- */
+
+function processBatch_(events) {
+  var P = loadProducts_();
+  var seen = loadSeen_();
+  var out = { POS_Sales: [], POS_Payouts: [], POS_GRV: [], POS_Adjustments: [], POS_Events: [] };
+  var acked = [], rejected = [];
+
+  events.forEach(function (ev) {
+    if (!ev || !ev.id) return;
+    if (seen[ev.id]) { acked.push(ev.id); return; }   // already processed: safe retry
+    try {
+      applyEvent_(P, ev, out);
+      seen[ev.id] = 1;
+      out.POS_Events.push([ev.id, ev.type, ev.ts, ev.terminal || '']);
+      acked.push(ev.id);
+    } catch (err) {
+      rejected.push({ id: ev.id, reason: String(err) });
+    }
+  });
+
+  saveProducts_(P);
+  Object.keys(out).forEach(function (n) { appendRows_(n, out[n]); });
+
+  var state = stateResponse_();
+  state.acked = acked;
+  state.rejected = rejected;
+  return state;
 }
 
-function ss_() {
-  let ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (ss) return ss;
-  const props = PropertiesService.getScriptProperties();
-  const id = props.getProperty('SPREADSHEET_ID');
-  if (id) return SpreadsheetApp.openById(id);
-  ss = SpreadsheetApp.create('Jubilee POS Data');
-  props.setProperty('SPREADSHEET_ID', ss.getId());
-  return ss;
+function applyEvent_(P, ev, out) {
+  var d = ev.data || {};
+  var when = ev.ts || new Date().toISOString();
+  var t = ev.terminal || '';
+
+  if (ev.type === 'sale') {
+    (d.items || []).forEach(function (it) {
+      var p = findProduct_(P, it.sku, it.name);
+      if (p) p.stock = num_(p.stock) - num_(it.qty);
+    });
+    out.POS_Sales.push([ev.id, d.date || when, d.ticket, d.method, num_(d.total), d.cashier, t, JSON.stringify(d.items || [])]);
+
+  } else if (ev.type === 'payout') {
+    out.POS_Payouts.push([ev.id, d.date || when, d.id, d.reason, num_(d.amount), d.notes || '', d.authorizedBy || '', t]);
+
+  } else if (ev.type === 'grv') {
+    (d.items || []).forEach(function (it) {
+      var p = findProduct_(P, it.sku, it.name);
+      if (p) {
+        p.stock = num_(p.stock) + num_(it.qty);
+        p.cost = num_(it.cost); p.price = num_(it.price);
+        if (d.supplier) p.supplier = d.supplier;
+      } else {
+        P.rows.push(newProduct_(P, { sku: it.sku, name: it.name, category: it.category || 'Wine', cost: it.cost, price: it.price, stock: it.qty, minStock: 10, supplier: d.supplier || '' }));
+      }
+    });
+    out.POS_GRV.push([ev.id, d.date || when, d.invoiceNo, d.supplier, num_(d.totalInvoiceCost), t, JSON.stringify(d.items || [])]);
+
+  } else if (ev.type === 'stock_adjust') {
+    var p2 = findProduct_(P, d.sku);
+    if (!p2) throw new Error('Unknown SKU ' + d.sku);
+    p2.stock = num_(p2.stock) + num_(d.delta);
+    out.POS_Adjustments.push([ev.id, when, d.sku, num_(d.delta), d.reason || '', t]);
+
+  } else if (ev.type === 'product_upsert') {
+    var p3 = findProduct_(P, d.oldSku || d.sku);
+    if (p3) {
+      ['sku', 'name', 'category', 'cost', 'price', 'minStock', 'supplier'].forEach(function (k) { if (d[k] !== undefined) p3[k] = d[k]; });
+    } else {
+      P.rows.push(newProduct_(P, d));
+    }
+
+  } else {
+    throw new Error('Unknown event type ' + ev.type);
+  }
 }
 
-function sheet_(name) {
-  const ss = ss_();
-  let sh = ss.getSheetByName(name);
+/* ---------------- Products sheet (mapped by header name) ---------------- */
+
+function norm_(h) { return String(h).toLowerCase().replace(/[^a-z]/g, ''); }
+
+function loadProducts_() {
+  var sh = getTab_('Products');
+  var keys = TABS.Products;
+  var lastCol = Math.max(sh.getLastColumn(), 1);
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  var colOf = {};
+  headers.forEach(function (h, i) { colOf[norm_(h)] = i; });
+  // add any missing columns at the end
+  keys.forEach(function (k) {
+    if (colOf[norm_(k)] === undefined) {
+      var c = sh.getLastColumn() + 1;
+      sh.getRange(1, c).setValue(k);
+      colOf[norm_(k)] = c - 1;
+      headers.push(k);
+    }
+  });
+  var width = headers.length;
+  var n = Math.max(sh.getLastRow() - 1, 0);
+  var data = n > 0 ? sh.getRange(2, 1, n, width).getValues() : [];
+  var rows = data.filter(function (r) { return String(r[colOf['sku']]).trim() !== '' || String(r[colOf['name']]).trim() !== ''; }).map(function (r) {
+    var o = { _raw: r };
+    keys.forEach(function (k) { o[k] = r[colOf[norm_(k)]]; });
+    return o;
+  });
+  return { sh: sh, keys: keys, colOf: colOf, width: width, rows: rows, previousCount: n };
+}
+
+function newProduct_(P, d) {
+  var raw = new Array(P.width).fill('');
+  var o = { _raw: raw };
+  P.keys.forEach(function (k) { o[k] = d[k] !== undefined ? d[k] : (k === 'minStock' ? 10 : ''); });
+  o.cost = num_(o.cost); o.price = num_(o.price); o.stock = num_(o.stock);
+  return o;
+}
+
+function findProduct_(P, sku, name) {
+  var i, r;
+  if (sku !== undefined && sku !== null && String(sku) !== '') {
+    for (i = 0; i < P.rows.length; i++) if (String(P.rows[i].sku) === String(sku)) return P.rows[i];
+  }
+  if (name) {
+    for (i = 0; i < P.rows.length; i++) if (String(P.rows[i].name).toLowerCase() === String(name).toLowerCase()) return P.rows[i];
+  }
+  return null;
+}
+
+function saveProducts_(P) {
+  var total = Math.max(P.rows.length, P.previousCount);
+  if (total === 0) return;
+  var out = [];
+  for (var i = 0; i < total; i++) {
+    if (i < P.rows.length) {
+      var o = P.rows[i], r = o._raw.slice();
+      while (r.length < P.width) r.push('');
+      P.keys.forEach(function (k) { r[P.colOf[norm_(k)]] = o[k]; });
+      out.push(r);
+    } else {
+      out.push(new Array(P.width).fill(''));
+    }
+  }
+  var skuCol = P.colOf['sku'] + 1;
+  P.sh.getRange(2, skuCol, total, 1).setNumberFormat('@');   // keep barcodes as text
+  P.sh.getRange(2, 1, total, P.width).setValues(out);
+}
+
+/* ---------------- state returned to the tills ---------------- */
+
+function stateResponse_() {
+  var P = loadProducts_();
+  var products = P.rows.map(function (o) {
+    return { sku: String(o.sku), name: o.name, category: o.category, cost: num_(o.cost), price: num_(o.price), stock: num_(o.stock), minStock: num_(o.minStock) || 10, supplier: o.supplier };
+  });
+  var cutoff = new Date().getTime() - RECENT_DAYS * 86400000;
+
+  var sales = recentRows_('POS_Sales', 400).filter(function (r) { return new Date(r[1]).getTime() >= cutoff; }).map(function (r) {
+    var items = []; try { items = JSON.parse(r[7] || '[]'); } catch (e) {}
+    return { uid: r[0], date: toIso_(r[1]), ticket: r[2], method: r[3], total: num_(r[4]), cashier: r[5], terminal: r[6], items: items };
+  });
+  var payouts = recentRows_('POS_Payouts', 200).filter(function (r) { return new Date(r[1]).getTime() >= cutoff; }).map(function (r) {
+    return { uid: r[0], date: toIso_(r[1]), id: r[2], reason: r[3], amount: num_(r[4]), notes: r[5], authorizedBy: r[6], terminal: r[7] };
+  });
+  return { status: 'success', serverTime: new Date().toISOString(), products: products, sales: sales, payouts: payouts };
+}
+
+function recentRows_(name, max) {
+  var sh = getTab_(name);
+  var last = sh.getLastRow();
+  if (last < 2) return [];
+  var n = Math.min(max, last - 1);
+  return sh.getRange(last - n + 1, 1, n, TABS[name].length).getValues();
+}
+
+/* ---------------- helpers ---------------- */
+
+function getTab_(name) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
-    sh.getRange(1, 1, 1, HEAD[name].length).setValues([HEAD[name]]).setFontWeight('bold');
+    sh.getRange(1, 1, 1, TABS[name].length).setValues([TABS[name]]).setFontWeight('bold');
     sh.setFrozenRows(1);
-    sh.getRange(2, 1, sh.getMaxRows() - 1, 2).setNumberFormat('@'); // keep SKUs/dates as text
+  } else if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, TABS[name].length).setValues([TABS[name]]).setFontWeight('bold');
   }
   return sh;
 }
 
-function read_(name) {
-  const sh = sheet_(name), last = sh.getLastRow();
-  if (last < 2) return [];
-  return sh.getRange(2, 1, last - 1, HEAD[name].length).getValues()
-    .filter(r => r[0] !== '')
-    .map(r => { const o = {}; HEAD[name].forEach((c, i) => o[c] = r[i]); return o; });
+function appendRows_(name, rows) {
+  if (!rows || !rows.length) return;
+  var sh = getTab_(name);
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
 
-function write_(name, rows) {
-  const sh = sheet_(name), w = HEAD[name].length, last = sh.getLastRow();
-  if (last > 1) sh.getRange(2, 1, last - 1, w).clearContent();
-  if (rows.length) sh.getRange(2, 1, rows.length, w).setValues(rows);
+function loadSeen_() {
+  var sh = getTab_('POS_Events');
+  var last = sh.getLastRow(), seen = {};
+  if (last < 2) return seen;
+  var n = Math.min(5000, last - 1);
+  sh.getRange(last - n + 1, 1, n, 1).getValues().forEach(function (r) { seen[r[0]] = 1; });
+  return seen;
 }
 
-function append_(name, row) {
-  const sh = sheet_(name);
-  sh.getRange(sh.getLastRow() + 1, 1, 1, row.length).setValues([row]);
+function num_(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function toIso_(v) { return v instanceof Date ? v.toISOString() : String(v); }
+function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+
+/* ---------------- Google Drive backup ---------------- */
+
+function doBackup_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var dump = { createdAt: new Date().toISOString(), sheets: {} };
+  Object.keys(TABS).forEach(function (n) {
+    var sh = ss.getSheetByName(n);
+    if (sh && sh.getLastRow() > 0) dump.sheets[n] = sh.getDataRange().getValues();
+  });
+  var it = DriveApp.getFoldersByName(BACKUP_FOLDER);
+  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER);
+  var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd_HHmm');
+  var file = folder.createFile('jubilee-pos-backup-' + stamp + '.json', JSON.stringify(dump), MimeType.PLAIN_TEXT);
+
+  var files = [], fi = folder.getFiles();
+  while (fi.hasNext()) files.push(fi.next());
+  files.sort(function (a, b) { return b.getDateCreated() - a.getDateCreated(); });
+  files.slice(KEEP_BACKUPS).forEach(function (f) { f.setTrashed(true); });
+  return { status: 'success', file: BACKUP_FOLDER + '/' + file.getName() };
+}
+
+function dailyBackup() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try { doBackup_(); } finally { lock.releaseLock(); }
+}
+
+function installDailyBackup() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'dailyBackup') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('dailyBackup').timeBased().everyDays(1).atHour(3).create();
 }
