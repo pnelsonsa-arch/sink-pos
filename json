@@ -1,5 +1,7 @@
-{{
-  "name": "sinkpos",
+{
+  "name": "my-site",
   "compatibility_date": "2026-11-01",
-  "assets": { "directory": "./" }
+  "assets": {
+    "directory": "./public"
+  }
 }
