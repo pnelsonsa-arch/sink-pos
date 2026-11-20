@@ -1591,5 +1591,102 @@
             window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(console.warn));
         }
     </script>
+<script>
+  // Give each tablet/till a unique device ID so you know which till rang up the sale
+  const DEVICE_ID = localStorage.getItem('jubilee_device_id') || (() => {
+    const id = 'TILL-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+    localStorage.setItem('jubilee_device_id', id);
+    return id;
+  })();
+
+  let isSyncing = false;
+
+  // 1. Register Service Worker for offline loading
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(console.error);
+  }
+
+  // 2. Call this when completing a SALE, PAYOUT, or GRV
+  function queueOfflineTransaction(type, data) {
+    const queue = JSON.parse(localStorage.getItem('jubilee_sync_queue') || '[]');
+    queue.push({
+      id: crypto.randomUUID(),
+      type: type, // 'SALE', 'PAYOUT', or 'GRV'
+      deviceId: DEVICE_ID,
+      timestamp: new Date().toISOString(),
+      cashier: document.getElementById('currentUserDisplay')?.innerText || 'Unknown',
+      ...data
+    });
+    localStorage.setItem('jubilee_sync_queue', JSON.stringify(queue));
+    updateCloudBadge();
+    autoSyncWithGoogle(); // Syncs immediately if online, or waits silently if offline
+  }
+
+  // 3. Automatic Background Sync
+  async function autoSyncWithGoogle() {
+    const scriptUrl = localStorage.getItem('jubilee_google_script_url');
+    if (!scriptUrl || !navigator.onLine || isSyncing) {
+      updateCloudBadge();
+      return;
+    }
+
+    const queue = JSON.parse(localStorage.getItem('jubilee_sync_queue') || '[]');
+    isSyncing = true;
+    updateCloudBadge('syncing');
+
+    try {
+      const res = await fetch(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ queue })
+      });
+      const data = await res.json();
+
+      if (data.status === 'success') {
+        // Remove synced items from local queue
+        const remaining = queue.filter(item => !data.syncedIds.includes(item.id));
+        localStorage.setItem('jubilee_sync_queue', JSON.stringify(remaining));
+
+        // Update local inventory & staff cache if returned from Sheets
+        if (data.inventory?.length) localStorage.setItem('jubilee_inventory', JSON.stringify(data.inventory));
+        if (data.staff?.length) localStorage.setItem('jubilee_staff', JSON.stringify(data.staff));
+      }
+    } catch (err) {
+      console.warn('Wi-Fi unstable; items safely stored locally for next retry.');
+    } finally {
+      isSyncing = false;
+      updateCloudBadge();
+    }
+  }
+
+  // 4. Update the #cloudStatusBadge dot in your header
+  function updateCloudBadge(state) {
+    const badge = document.getElementById('cloudStatusBadge');
+    if (!badge) return;
+    const queue = JSON.parse(localStorage.getItem('jubilee_sync_queue') || '[]');
+
+    badge.className = 'w-2.5 h-2.5 rounded-full transition-colors ';
+    if (state === 'syncing') {
+      badge.className += 'bg-cyanNeon animate-ping';
+      badge.title = 'Syncing to Google Drive & Sheets...';
+    } else if (!navigator.onLine) {
+      badge.className += 'bg-magentaNeon'; // Pink/Red = Offline (queued)
+      badge.title = `Offline (${queue.length} waiting to backup)`;
+    } else if (queue.length > 0) {
+      badge.className += 'bg-amber-400'; // Yellow = Online, pending sync
+      badge.title = `${queue.length} items pending sync`;
+    } else {
+      badge.className += 'bg-emeraldNeon'; // Green = All backed up
+      badge.title = 'All data synced to Google Sheets & Drive';
+    }
+  }
+
+  // Auto-trigger when Wi-Fi reconnects + check every 20 seconds
+  window.addEventListener('online', autoSyncWithGoogle);
+  window.addEventListener('offline', () => updateCloudBadge());
+  setInterval(autoSyncWithGoogle, 20000);
+  document.addEventListener('DOMContentLoaded', () => updateCloudBadge());
+</script>
+    
 </body>
 </html>
