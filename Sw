@@ -1,61 +1,64 @@
-const CACHE_NAME = 'jubilee-pos-v3.7';
-const APP_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.webmanifest',
-  'https://tailwindcss.com',
-  'https://cloudflare.com',
-  'https://cloudflare.com'
+/* Jubilee POS service worker: makes the app open and run with no internet.
+   Bump CACHE_VERSION whenever you deploy a new index.html so tills pick it up. */
+const CACHE_VERSION = 'jubilee-pos-v4';
+const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
+const LIBS = [
+  'https://cdn.tailwindcss.com',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+  'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-regular-400.woff2'
 ];
+const LIB_HOSTS = ['cdn.tailwindcss.com', 'cdnjs.cloudflare.com'];
 
-// Install: pre-cache core app shell & CDN dependencies
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return Promise.allSettled(
-        APP_ASSETS.map((url) =>
-          cache.add(new Request(url, { mode: 'no-cors' })).catch(() => null)
-        )
-      );
-    })
-  );
-  self.skipWaiting();
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_VERSION);
+    await Promise.all(SHELL.map(u => cache.add(u).catch(() => {})));
+    await Promise.all(LIBS.map(u => fetch(u, { mode: 'no-cors' }).then(r => cache.put(u, r)).catch(() => {})));
+    self.skipWaiting();
+  })());
 });
 
-// Activate: clean up old caches
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
 });
 
-// Fetch: network-first for Google Apps Script API, cache-first with network fallback for UI assets
 self.addEventListener('fetch', (event) => {
-  const url = event.request.url;
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
 
-  // Never cache Google Apps Script API calls
-  if (url.includes('://google.com') || url.includes('://googleusercontent.com')) {
+  // Never cache Google Sheets / Apps Script traffic: the app handles offline itself.
+  if (url.hostname.endsWith('google.com') || url.hostname.endsWith('googleusercontent.com')) return;
+
+  // Page loads: try the network (so updates arrive), fall back to the saved copy offline.
+  if (req.mode === 'navigate') {
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(req);
+        const cache = await caches.open(CACHE_VERSION);
+        cache.put('/index.html', fresh.clone());
+        return fresh;
+      } catch (e) {
+        return (await caches.match('/index.html')) || (await caches.match('/')) || Response.error();
+      }
+    })());
     return;
   }
 
-  if (event.request.method !== 'GET') return;
-
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const networkFetch = fetch(event.request)
-        .then((response) => {
-          if (response && (response.status === 200 || response.type === 'opaque')) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-
-      return cached || networkFetch;
-    })
-  );
+  // Same-origin files and the CDN libraries: serve the saved copy, refresh it in the background.
+  if (url.origin === self.location.origin || LIB_HOSTS.includes(url.hostname)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_VERSION);
+      const cached = await cache.match(req);
+      const network = fetch(req).then(res => { if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone()); return res; }).catch(() => null);
+      return cached || (await network) || Response.error();
+    })());
+  }
 });
