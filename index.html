@@ -1687,6 +1687,76 @@
   setInterval(autoSyncWithGoogle, 20000);
   document.addEventListener('DOMContentLoaded', () => updateCloudBadge());
 </script>
-    
+// 1. VAT MATH (15% SA VAT included in price)
+function extractVat(inclVatAmount) {
+  const amount = Number(inclVatAmount || 0);
+  const exclVat = amount / 1.15;
+  return Number((amount - exclVat).toFixed(2));
+}
+
+// 2. RECEIPT TEXT + WHATSAPP LINK
+function buildReceiptText(businessName, sale) {
+  const vat = extractVat(sale.total);
+  const lines = [
+    String(businessName || "JUBILEE POS").toUpperCase(),
+    "Ticket: " + sale.ticket,
+    "Date: " + new Date(sale.date || Date.now()).toLocaleString("en-ZA"),
+    "Cashier: " + (sale.cashier || "Staff"),
+    "--------------------------------",
+    ...(sale.items || []).map(
+      (i) => `${i.qty}x ${String(i.name).slice(0, 18)}  R${(Number(i.qty) * Number(i.price)).toFixed(2)}`
+    ),
+    "--------------------------------",
+    "VAT (15% incl.):        R" + vat.toFixed(2),
+    "TOTAL:                  R" + Number(sale.total || 0).toFixed(2),
+    "Paid (" + sale.method + ")",
+  ];
+
+  if (sale.method === "Cash" && sale.tendered !== undefined) {
+    lines.push("Cash Tendered:          R" + Number(sale.tendered).toFixed(2));
+    lines.push("Change:                 R" + Number(sale.changeDue || 0).toFixed(2));
+  }
+
+  lines.push("Thank you!");
+  return lines.join("\n");
+}
+
+function getWhatsAppReceiptUrl(businessName, sale) {
+  const text = buildReceiptText(businessName, sale);
+  return "https://wa.me/?text=" + encodeURIComponent(text);
+}
+
+// 3. LOW-STOCK ALERTS GROUPED BY SUPPLIER
+function getLowStockBySupplier(products) {
+  const lowItems = (products || []).filter(
+    (p) => Number(p.stock) <= Number(p.minReorder)
+  );
+
+  return lowItems.reduce((groups, item) => {
+    const supplier = item.supplier || "Other Supplier";
+    if (!groups[supplier]) groups[supplier] = [];
+    groups[supplier].push(item);
+    return groups;
+  }, {});
+}
+
+// 4. END-OF-SHIFT CASH-UP MATH
+function calculateCashUp({ openingFloat, cashSales, cardSales, payouts, countedCash }) {
+  const open = Number(openingFloat || 0);
+  const cash = Number(cashSales || 0);
+  const card = Number(cardSales || 0);
+  const out = Number(payouts || 0);
+  const counted = Number(countedCash || 0);
+
+  const expectedCash = Number((open + cash - out).toFixed(2));
+  const variance = Number((counted - expectedCash).toFixed(2));
+
+  return {
+    expectedCash,
+    countedCash: counted,
+    variance, // + means extra cash in drawer, - means short
+    totalSales: Number((cash + card).toFixed(2)),
+  };
+}    
 </body>
 </html>
